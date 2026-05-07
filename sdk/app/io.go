@@ -13,23 +13,6 @@ type HTTPResponse struct {
 	Body       []byte
 }
 
-// Message represents a message from a queue or topic.
-type Message struct {
-	ID        string
-	Topic     string
-	Key       string
-	Headers   map[string]string
-	Body      []byte
-	Timestamp string
-}
-
-// ConsumeOptions configures message consumption.
-type ConsumeOptions struct {
-	MaxCount int    // Maximum number of messages to consume
-	Timeout  int    // Timeout in seconds
-	Group    string // Consumer group name
-}
-
 // IOOperation represents a pending I/O operation with required permissions.
 type IOOperation struct {
 	ctx         *Context

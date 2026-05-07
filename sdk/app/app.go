@@ -31,12 +31,6 @@ type StreamHandler interface {
 	Finalize(ctx *Context) (*Response, error)
 }
 
-// MessageHandler handles messages from queues or topics.
-type MessageHandler interface {
-	// HandleMessage processes a single message.
-	HandleMessage(ctx *Context, msg *Message) error
-}
-
 // MCPToolHandler handles MCP tool invocations with JSON input/output.
 // This is the simplest handler for building MCP tools.
 type MCPToolHandler interface {
@@ -151,59 +145,6 @@ func RunStream(handler StreamHandler) {
 
 	writeResponse(response)
 	os.Exit(response.ExitCode)
-}
-
-// RunConsumer executes a message handler that consumes messages from a topic.
-func RunConsumer(topic string, handler MessageHandler, opts *ConsumeOptions) {
-	ctx := buildContext()
-
-	// Consume messages from topic
-	if opts == nil {
-		opts = &ConsumeOptions{MaxCount: 10, Timeout: 5}
-	}
-
-	// Use unified I/O API to consume messages
-	result, err := ctx.IO(fmt.Sprintf("queue://%s", topic), "consume").Call(map[string]interface{}{
-		"maxCount": opts.MaxCount,
-		"timeout":  opts.Timeout,
-		"group":    opts.Group,
-	})
-	if err != nil {
-		handleError(ctx, err)
-		os.Exit(1)
-	}
-
-	// Parse messages from result
-	var messages []*Message
-	if messagesData, ok := result["messages"]; ok {
-		if messagesJSON, err := json.Marshal(messagesData); err == nil {
-			json.Unmarshal(messagesJSON, &messages)
-		}
-	}
-
-	// Process each message
-	successCount := 0
-	errorCount := 0
-	for _, msg := range messages {
-		if err := handler.HandleMessage(ctx, msg); err != nil {
-			ctx.Log.Error("message processing failed",
-				String("messageId", msg.ID),
-				ErrorField(err))
-			errorCount++
-		} else {
-			successCount++
-		}
-	}
-
-	ctx.Log.Info("message processing complete",
-		Int("success", successCount),
-		Int("errors", errorCount),
-		Int("total", len(messages)))
-
-	if errorCount > 0 {
-		os.Exit(1)
-	}
-	os.Exit(0)
 }
 
 // Helper functions for error handling and output.

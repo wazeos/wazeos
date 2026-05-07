@@ -75,12 +75,6 @@ func NewDriverPolicyRegistry() types.DriverPolicyRegistry {
 			Requirement: types.RequirementRequired,
 			Description: "Authorization engine - exactly one required",
 		},
-		{
-			Class:       "kernel.ipc",
-			Cardinality: types.CardinalityMany,
-			Requirement: types.RequirementOptional,
-			Description: "Inter-process communication - multiple allowed, not required",
-		},
 	}
 
 	for _, policy := range defaultPolicies {
