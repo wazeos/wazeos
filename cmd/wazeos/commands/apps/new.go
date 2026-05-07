@@ -13,6 +13,7 @@ import (
 
 var (
 	newAppDescription string
+	newAppLanguage    string
 )
 
 var newCmd = &cobra.Command{
@@ -20,20 +21,21 @@ var newCmd = &cobra.Command{
 	Short: "Create a new WASM app project",
 	Long: `Create a new WazeOS WASM application project with a skeleton structure.
 
-Creates a directory structure at ./{author}/{app-name}/ with:
-  - main.go: Basic WASM app template
-  - metadata.json: App metadata
-  - go.mod: Go module file
-  - Makefile: Build commands
-  - README.md: Documentation
-  - .gitignore: Ignore build artifacts
+Supports multiple languages:
+  - Go (default): Uses TinyGo for WASM compilation
+  - Rust: Uses Cargo with wasm32-wasi target
+
+Creates a directory structure at ./{author}/{app-name}/ with language-specific templates.
 
 Examples:
   # Interactive mode (prompts for author and name)
   wazeos apps new
 
-  # With arguments
+  # Create Go app (default)
   wazeos apps new mycompany myapp
+
+  # Create Rust app
+  wazeos apps new mycompany myapp --language rust
 
   # With description
   wazeos apps new mycompany myapp --description "My awesome app"`,
@@ -43,6 +45,7 @@ Examples:
 
 func init() {
 	newCmd.Flags().StringVar(&newAppDescription, "description", "", "package description")
+	newCmd.Flags().StringVar(&newAppLanguage, "language", "go", "programming language (go or rust)")
 }
 
 func runNew(cmd *cobra.Command, args []string) {
@@ -78,6 +81,13 @@ func runNew(cmd *cobra.Command, args []string) {
 		description = fmt.Sprintf("WASM application: %s", appName)
 	}
 
+	// Validate and normalize language
+	language := strings.ToLower(newAppLanguage)
+	if language != "go" && language != "rust" {
+		fmt.Fprintf(os.Stderr, "Error: unsupported language '%s'. Supported: go, rust\n", language)
+		os.Exit(1)
+	}
+
 	// Create project directory
 	projectDir := filepath.Join(".", author, appName)
 	if _, err := os.Stat(projectDir); !os.IsNotExist(err) {
@@ -91,13 +101,13 @@ func runNew(cmd *cobra.Command, args []string) {
 	}
 
 	// Generate project files
-	if err := generateProjectFiles(projectDir, author, appName, description); err != nil {
+	if err := generateProjectFiles(projectDir, author, appName, description, language); err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating project: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Success message
-	fmt.Printf("✓ Created new app project: %s\n\n", projectDir)
+	fmt.Printf("✓ Created new %s app project: %s\n\n", strings.Title(language), projectDir)
 	fmt.Println("Next steps:")
 	fmt.Printf("  cd %s\n", projectDir)
 	fmt.Println("  wazeos apps build .    # Build the WASM binary")
@@ -128,13 +138,32 @@ func validateName(name string) error {
 	return nil
 }
 
-func generateProjectFiles(projectDir, author, appName, description string) error {
-	files := map[string]string{
-		"main.go":       generateMainGo(),
-		"metadata.json": generateMetadata(author, appName, description),
-		"go.mod":        generateGoMod(author, appName),
-		"README.md":     generateReadme(author, appName, description),
-		".gitignore":    generateGitignore(),
+func generateProjectFiles(projectDir, author, appName, description, language string) error {
+	var files map[string]string
+
+	if language == "rust" {
+		// Create src directory for Rust projects
+		srcDir := filepath.Join(projectDir, "src")
+		if err := os.MkdirAll(srcDir, 0755); err != nil {
+			return fmt.Errorf("failed to create src directory: %w", err)
+		}
+
+		files = map[string]string{
+			"src/main.rs":   generateMainRust(),
+			"Cargo.toml":    generateCargoToml(author, appName, description),
+			"metadata.json": generateMetadata(author, appName, description),
+			"README.md":     generateReadmeRust(author, appName, description),
+			".gitignore":    generateGitignoreRust(),
+		}
+	} else {
+		// Go project
+		files = map[string]string{
+			"main.go":       generateMainGo(),
+			"metadata.json": generateMetadata(author, appName, description),
+			"go.mod":        generateGoMod(author, appName),
+			"README.md":     generateReadme(author, appName, description),
+			".gitignore":    generateGitignore(),
+		}
 	}
 
 	for filename, content := range files {
@@ -457,6 +486,261 @@ app.wasm
 # IDE
 .vscode/
 .idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+`
+}
+
+// ============================================================================
+// Rust Template Generation Functions
+// ============================================================================
+
+func generateMainRust() string {
+	return `use serde_json::{json, Value};
+use wazeos_app::{run_mcp_tool, Context, MCPToolHandler};
+
+/// Input structure for the tool.
+///
+/// For Rust apps, you need to manually define the input schema in metadata.json.
+/// The schema should match this structure.
+#[derive(serde::Deserialize, Debug)]
+struct Input {
+    /// Message to echo back
+    #[serde(default)]
+    message: String,
+}
+
+struct Tool;
+
+impl MCPToolHandler for Tool {
+    fn handle(&self, ctx: &Context, input: Value) -> Result<Value, Box<dyn std::error::Error>> {
+        // Parse input - handle both empty input and typed input
+        let input: Input = serde_json::from_value(input).unwrap_or(Input {
+            message: String::new(),
+        });
+
+        // Log execution
+        ctx.info(&format!("Tool invoked with message: {}", input.message));
+
+        // Process the input
+        let greeting = if input.message.is_empty() {
+            "Hello from WazeOS!".to_string()
+        } else {
+            format!("Hello, {}!", input.message)
+        };
+
+        // Example: Check permissions
+        // if !ctx.has_permission("file:///tmp/*", &["read"]) {
+        //     return Err("Permission denied".into());
+        // }
+
+        // Return JSON response
+        Ok(json!({
+            "status": "success",
+            "message": greeting,
+        }))
+    }
+}
+
+fn main() {
+    run_mcp_tool(&Tool);
+}
+`
+}
+
+func generateCargoToml(author, appName, description string) string {
+	return fmt.Sprintf(`[package]
+name = "%s"
+version = "1.0.0"
+edition = "2021"
+authors = ["%s"]
+description = "%s"
+
+[dependencies]
+wazeos-app = { path = "../../../sdk/rust/wazeos-app" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[[bin]]
+name = "app"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = "z"     # Optimize for size
+lto = true          # Enable Link Time Optimization
+codegen-units = 1   # Better optimization
+strip = true        # Strip symbols
+panic = "abort"     # Smaller binary
+`, appName, author, description)
+}
+
+func generateReadmeRust(author, appName, description string) string {
+	return fmt.Sprintf(`# %s
+
+%s
+
+A WazeOS WASM application written in Rust that can be called as an MCP tool.
+
+## Quick Start
+
+`+"```bash"+`
+# Build the app
+wazeos apps build .
+
+# Build and create package
+wazeos apps package .
+
+# Build, package, and install
+wazeos apps install .
+`+"```"+`
+
+## Development
+
+This app uses the WazeOS Rust SDK for building MCP tools.
+
+### Defining Input Parameters
+
+For Rust apps, you need to manually define the input schema in `+"`metadata.json`"+`:
+
+`+"```json"+`
+{
+  "name": "%s",
+  "version": "1.0.0",
+  "author": "%s",
+  "description": "%s",
+  "type": "app",
+  "entrypoint": "_start",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "message": {
+        "type": "string",
+        "description": "Message to echo back",
+        "default": ""
+      }
+    }
+  }
+}
+`+"```"+`
+
+Then create a matching Rust struct:
+
+`+"```rust"+`
+#[derive(serde::Deserialize, Debug)]
+struct Input {
+    #[serde(default)]
+    message: String,
+}
+`+"```"+`
+
+### Implementing the Handler
+
+Edit the `+"`handle`"+` method in `+"`src/main.rs`"+` to process MCP tool calls:
+
+`+"```rust"+`
+impl MCPToolHandler for Tool {
+    fn handle(&self, ctx: &Context, input: Value) -> Result<Value, Box<dyn std::error::Error>> {
+        // Parse input
+        let input: Input = serde_json::from_value(input)?;
+
+        // Process with type safety
+        let greeting = format!("Hello, {}!", input.message);
+
+        // Return JSON response
+        Ok(json!({
+            "status": "success",
+            "message": greeting,
+        }))
+    }
+}
+`+"```"+`
+
+### Using the Context
+
+The `+"`Context`"+` provides access to execution metadata:
+
+`+"```rust"+`
+// Logging
+ctx.info("Operation complete");
+ctx.warn("This is a warning");
+ctx.error("Something went wrong");
+
+// Check permissions
+if !ctx.has_permission("file:///tmp/*", &["read"]) {
+    return Err("Permission denied".into());
+}
+
+// Access metadata
+let request_id = &ctx.request_id;
+let principal = &ctx.principal;
+`+"```"+`
+
+### MCP Tool Integration
+
+When installed, this app is automatically exposed as an MCP tool that Claude can call.
+Make sure the `+"`inputSchema`"+` in `+"`metadata.json`"+` matches your Input struct.
+
+## Build Process
+
+When you run `+"`wazeos apps build`"+`, it:
+1. Detects the Rust language from `+"`Cargo.toml`"+`
+2. Compiles to WASM using `+"`cargo build --target wasm32-wasi --release`"+`
+3. Copies the WASM binary to `+"`app.wasm`"+`
+
+**Note:** Unlike Go apps, Rust apps require manual schema maintenance in `+"`metadata.json`"+`.
+
+## Testing
+
+`+"```bash"+`
+# Build first
+wazeos apps build .
+
+# Test with sample input (requires wasmtime or similar)
+echo '{"message": "World"}' | wasmtime app.wasm
+
+# Expected output:
+# {"status":"success","message":"Hello, World!"}
+`+"```"+`
+
+## Structure
+
+- `+"`src/main.rs`"+` - Application implementation
+- `+"`Cargo.toml`"+` - Rust package manifest
+- `+"`metadata.json`"+` - Package metadata (manually maintained)
+
+## Requirements
+
+- [Rust](https://rustup.rs/) with `+"`wasm32-wasi`"+` target
+- WazeOS CLI
+
+Install the WASM target:
+`+"```bash"+`
+rustup target add wasm32-wasi
+`+"```"+`
+
+## Author
+
+%s
+`, appName, description, appName, author, description, author)
+}
+
+func generateGitignoreRust() string {
+	return `# Build artifacts
+app.wasm
+*.zip
+
+# Rust build
+/target/
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
 # OS files
 .DS_Store

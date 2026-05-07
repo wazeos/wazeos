@@ -1,0 +1,23 @@
+[package]
+name = "wazeos-app"
+version = "0.1.0"
+edition = "2021"
+authors = ["WazeOS Contributors"]
+description = "Rust SDK for building WazeOS WASM applications and MCP tools"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/wazeos/wazeos"
+keywords = ["wasm", "wazeos", "app", "mcp", "sdk"]
+categories = ["wasm", "api-bindings"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+opt-level = "z"     # Optimize for size
+lto = true          # Enable Link Time Optimization
+codegen-units = 1   # Better optimization
+strip = true        # Strip symbols

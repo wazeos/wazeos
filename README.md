@@ -6,7 +6,8 @@ WazeOS is a lightweight, secure execution platform for WebAssembly applications 
 
 ## Features
 
-- **WebAssembly Runtime**: Execute WASM applications with TinyGo support
+- **WebAssembly Runtime**: Execute WASM applications with multi-language support
+- **Multi-Language Support**: Build apps and drivers in Go, Rust, or any language that compiles to WASM
 - **Sophisticated I/O Routing**: URI pattern matching with specificity-based driver selection
 - **Credential Injection**: Automatic, secure credential management for applications
 - **Driver Architecture**: Extensible system with pluggable drivers for I/O, security, and runtime
@@ -19,9 +20,18 @@ WazeOS is a lightweight, secure execution platform for WebAssembly applications 
 
 ### Prerequisites
 
+**For running WazeOS:**
 - Go 1.21 or higher
-- TinyGo (for building WASM applications)
 - Make (optional, for convenience commands)
+
+**For building WASM applications (choose one or both):**
+- **Go**: [TinyGo](https://tinygo.org/getting-started/install/) (for Go applications)
+- **Rust**: [Rust toolchain](https://rustup.rs/) with `wasm32-wasi` target
+  ```bash
+  rustup target add wasm32-wasi
+  ```
+
+> **Note**: WazeOS supports multiple languages. You only need the toolchain for the language(s) you want to use.
 
 ### Installation
 
@@ -68,6 +78,103 @@ wazeos secrets set api_key=sk_test_123
 # View available drivers
 wazeos drivers list
 ```
+
+## Multi-Language Support
+
+WazeOS supports building applications and drivers in multiple programming languages. Any language that compiles to WASM with WASI support can be used.
+
+### Currently Supported Languages
+
+#### Go (via TinyGo)
+
+```bash
+# Create a new Go app
+wazeos apps new mycompany myapp
+
+# Build and install
+wazeos apps build mycompany/myapp
+wazeos apps install mycompany/myapp
+```
+
+**Features:**
+- Automatic JSON schema generation from struct tags
+- Full SDK with logging, I/O, and context management
+- Production-ready with comprehensive tooling
+
+#### Rust
+
+```bash
+# Create a new Rust app
+wazeos apps new mycompany myapp --language rust
+
+# Build and install
+wazeos apps build mycompany/myapp
+wazeos apps install mycompany/myapp
+```
+
+**Features:**
+- Memory-safe, zero-cost abstractions
+- Excellent performance and small WASM binaries
+- Full type safety and error handling
+- Manual JSON schema definition in metadata.json
+
+### Language-Agnostic Architecture
+
+WazeOS uses a simple JSON-over-stdio protocol that works with any language:
+
+```
+Kernel  ←→  [JSON via stdin/stdout]  ←→  WASM Module (any language)
+```
+
+**Key Points:**
+- Applications read JSON input from stdin
+- Applications write JSON output to stdout
+- No language-specific runtime dependencies
+- All languages use the same package format
+
+### Building in Different Languages
+
+**Go Example:**
+```go
+import "github.com/wazeos/wazeos/sdk/app"
+
+type Tool struct{}
+
+func (t *Tool) Handle(ctx *app.Context, input map[string]interface{}) (map[string]interface{}, error) {
+    return map[string]interface{}{"status": "success"}, nil
+}
+
+func main() {
+    app.RunMCPTool(&Tool{})
+}
+```
+
+**Rust Example:**
+```rust
+use wazeos_app::{run_mcp_tool, Context, MCPToolHandler};
+use serde_json::{json, Value};
+
+struct Tool;
+
+impl MCPToolHandler for Tool {
+    fn handle(&self, ctx: &Context, input: Value) -> Result<Value, Box<dyn std::error::Error>> {
+        Ok(json!({"status": "success"}))
+    }
+}
+
+fn main() {
+    run_mcp_tool(&Tool);
+}
+```
+
+### Adding New Languages
+
+Want to add support for another language? See [docs/LANGUAGE_SUPPORT.md](docs/LANGUAGE_SUPPORT.md) for a comprehensive guide on:
+- Language requirements
+- SDK structure
+- Build system integration
+- Template generation
+- Testing and publishing
 
 ## Architecture
 

@@ -15,6 +15,7 @@ var (
 	newDriverClass       string
 	newDriverDescription string
 	newDriverPatterns    []string
+	newDriverLanguage    string
 )
 
 var newCmd = &cobra.Command{
@@ -22,20 +23,21 @@ var newCmd = &cobra.Command{
 	Short: "Create a new WASM driver project",
 	Long: `Create a new WazeOS WASM driver project with a skeleton structure.
 
-Creates a directory structure at ./{author}/{driver-name}/ with:
-  - main.go: Driver template with HandleCall
-  - metadata.json: Driver metadata
-  - go.mod: Go module file
-  - Makefile: Build commands
-  - README.md: Documentation
-  - .gitignore: Ignore build artifacts
+Supports multiple languages:
+  - Go (default): Uses TinyGo for WASM compilation
+  - Rust: Uses Cargo with wasm32-wasi target
+
+Creates a directory structure at ./{author}/{driver-name}/ with language-specific templates.
 
 Examples:
   # Interactive mode (prompts for author, name, and driver class)
   wazeos drivers new
 
-  # With arguments
+  # Create Go driver (default)
   wazeos drivers new mycompany mydriver --driver-class=io.resource
+
+  # Create Rust driver
+  wazeos drivers new mycompany mydriver --driver-class=io.resource --language rust
 
   # With URI patterns
   wazeos drivers new mycompany mydriver --driver-class=io.resource --patterns=custom://**`,
@@ -47,6 +49,7 @@ func init() {
 	newCmd.Flags().StringVar(&newDriverClass, "driver-class", "", "driver class (e.g., io.resource, kernel.security.authn)")
 	newCmd.Flags().StringVar(&newDriverDescription, "description", "", "driver description")
 	newCmd.Flags().StringSliceVar(&newDriverPatterns, "patterns", nil, "URI patterns (e.g., custom://**)")
+	newCmd.Flags().StringVar(&newDriverLanguage, "language", "go", "programming language (go or rust)")
 }
 
 func runNewDriver(cmd *cobra.Command, args []string) {
@@ -113,6 +116,13 @@ func runNewDriver(cmd *cobra.Command, args []string) {
 		}
 	}
 
+	// Validate and normalize language
+	language := strings.ToLower(newDriverLanguage)
+	if language != "go" && language != "rust" {
+		fmt.Fprintf(os.Stderr, "Error: unsupported language '%s'. Supported: go, rust\n", language)
+		os.Exit(1)
+	}
+
 	// Create project directory
 	projectDir := filepath.Join(".", author, driverName)
 	if _, err := os.Stat(projectDir); !os.IsNotExist(err) {
@@ -126,21 +136,21 @@ func runNewDriver(cmd *cobra.Command, args []string) {
 	}
 
 	// Generate project files
-	if err := generateDriverProjectFiles(projectDir, author, driverName, description, newDriverClass, patterns); err != nil {
+	if err := generateDriverProjectFiles(projectDir, author, driverName, description, newDriverClass, patterns, language); err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating project: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Success message
-	fmt.Printf("✓ Created new driver project: %s\n\n", projectDir)
+	fmt.Printf("✓ Created new %s driver project: %s\n\n", strings.Title(language), projectDir)
 	fmt.Println("Driver details:")
+	fmt.Printf("  Language:     %s\n", strings.Title(language))
 	fmt.Printf("  Class:        %s\n", newDriverClass)
 	fmt.Printf("  Patterns:     %v\n\n", patterns)
 	fmt.Println("Next steps:")
 	fmt.Printf("  cd %s\n", projectDir)
-	fmt.Println("  make build    # Build the WASM binary")
-	fmt.Println("  make package  # Create installable ZIP")
-	fmt.Println("  make install  # Install locally")
+	fmt.Println("  wazeos drivers build .    # Build the WASM binary")
+	fmt.Println("  wazeos drivers package .  # Create installable ZIP")
 }
 
 func promptRequired(prompt string) string {
@@ -166,14 +176,33 @@ func validateName(name string) error {
 	return nil
 }
 
-func generateDriverProjectFiles(projectDir, author, driverName, description, driverClass string, patterns []string) error {
-	files := map[string]string{
-		"main.go":       generateDriverMainGo(),
-		"metadata.json": generateDriverMetadata(author, driverName, description, driverClass, patterns),
-		"go.mod":        generateDriverGoMod(author, driverName),
-		"Makefile":      generateDriverMakefile(author, driverName, driverClass),
-		"README.md":     generateDriverReadme(author, driverName, description, driverClass, patterns),
-		".gitignore":    generateDriverGitignore(),
+func generateDriverProjectFiles(projectDir, author, driverName, description, driverClass string, patterns []string, language string) error {
+	var files map[string]string
+
+	if language == "rust" {
+		// Create src directory for Rust projects
+		srcDir := filepath.Join(projectDir, "src")
+		if err := os.MkdirAll(srcDir, 0755); err != nil {
+			return fmt.Errorf("failed to create src directory: %w", err)
+		}
+
+		files = map[string]string{
+			"src/main.rs":   generateDriverMainRust(),
+			"Cargo.toml":    generateDriverCargoToml(author, driverName, description),
+			"metadata.json": generateDriverMetadata(author, driverName, description, driverClass, patterns),
+			"README.md":     generateDriverReadmeRust(author, driverName, description, driverClass, patterns),
+			".gitignore":    generateDriverGitignoreRust(),
+		}
+	} else {
+		// Go project
+		files = map[string]string{
+			"main.go":       generateDriverMainGo(),
+			"metadata.json": generateDriverMetadata(author, driverName, description, driverClass, patterns),
+			"go.mod":        generateDriverGoMod(author, driverName),
+			"Makefile":      generateDriverMakefile(author, driverName, driverClass),
+			"README.md":     generateDriverReadme(author, driverName, description, driverClass, patterns),
+			".gitignore":    generateDriverGitignore(),
+		}
 	}
 
 	for filename, content := range files {
@@ -496,6 +525,249 @@ app.wasm
 
 # TinyGo cache
 .tinygo-cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+`
+}
+
+// ============================================================================
+// Rust Template Generation Functions
+// ============================================================================
+
+func generateDriverMainRust() string {
+	return `use wazeos_driver::{serve_resource_once, ResourceCall, ResourceHandler, ResourceResult};
+
+struct Driver;
+
+impl ResourceHandler for Driver {
+    fn handle_call(&self, call: &ResourceCall) -> Result<ResourceResult, Box<dyn std::error::Error>> {
+        // Check permissions - only proceed if we have required permissions
+        if !call.permissions.contains(&"read".to_string()) {
+            return Ok(ResourceResult::error(403, "Permission denied"));
+        }
+
+        // Parse the URI to understand what resource is being accessed
+        let uri = &call.uri;
+
+        // Log the call (to stderr)
+        eprintln!("Driver handling call to: {}", uri);
+
+        // Example: Handle different URI patterns
+        if uri.starts_with("custom://") {
+            let path = uri.strip_prefix("custom://").unwrap_or("");
+
+            // Example: Read operation
+            let content = format!("Content from {}", path);
+            return Ok(ResourceResult::success(200, content.into_bytes()));
+        }
+
+        // Unknown URI pattern
+        Ok(ResourceResult::error(404, "Resource not found"))
+    }
+}
+
+fn main() {
+    serve_resource_once(&Driver);
+}
+`
+}
+
+func generateDriverCargoToml(author, driverName, description string) string {
+	return fmt.Sprintf(`[package]
+name = "%s"
+version = "1.0.0"
+edition = "2021"
+authors = ["%s"]
+description = "%s"
+
+[dependencies]
+wazeos-driver = { path = "../../../sdk/rust/wazeos-driver" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[[bin]]
+name = "app"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = "z"     # Optimize for size
+lto = true          # Enable Link Time Optimization
+codegen-units = 1   # Better optimization
+strip = true        # Strip symbols
+panic = "abort"     # Smaller binary
+`, driverName, author, description)
+}
+
+func generateDriverReadmeRust(author, driverName, description, driverClass string, patterns []string) string {
+	patternsStr := strings.Join(patterns, ", ")
+	return fmt.Sprintf(`# %s
+
+%s
+
+A WazeOS WASM driver written in Rust.
+
+**Driver Details:**
+- Class: %s
+- URI Patterns: %s
+
+## Quick Start
+
+`+"```bash"+`
+# Build the driver
+wazeos drivers build .
+
+# Build and create package
+wazeos drivers package .
+`+"```"+`
+
+## Development
+
+This driver uses the WazeOS Rust SDK for handling resource calls.
+
+### Driver Implementation
+
+Edit `+"`src/main.rs`"+` to implement your driver logic:
+
+`+"```rust"+`
+impl ResourceHandler for Driver {
+    fn handle_call(&self, call: &ResourceCall) -> Result<ResourceResult, Box<dyn std::error::Error>> {
+        // Check permissions
+        if !call.permissions.contains(&"read".to_string()) {
+            return Ok(ResourceResult::error(403, "Permission denied"));
+        }
+
+        // Parse URI and handle request
+        let uri = &call.uri;
+
+        // Your logic here...
+
+        Ok(ResourceResult::success(200, b"response".to_vec()))
+    }
+}
+`+"```"+`
+
+### Resource Call Structure
+
+The `+"`ResourceCall`"+` contains:
+
+`+"```rust"+`
+pub struct ResourceCall {
+    pub uri: String,                      // The URI being accessed
+    pub headers: HashMap<String, String>, // HTTP-style headers
+    pub body: Vec<u8>,                    // Request body
+    pub permissions: Vec<String>,         // Available permissions
+}
+`+"```"+`
+
+### Resource Result
+
+Return a `+"`ResourceResult`"+` with status code and body:
+
+`+"```rust"+`
+// Success
+Ok(ResourceResult::success(200, data))
+
+// Error
+Ok(ResourceResult::error(404, "Not found"))
+
+// With headers
+Ok(ResourceResult::success(200, data)
+    .with_header("Content-Type", "application/json"))
+`+"```"+`
+
+### URI Pattern Matching
+
+Your driver will receive calls for URIs matching the patterns in `+"`metadata.json`"+`:
+
+`+"```"+`
+Patterns: %s
+`+"```"+`
+
+Parse the URI to determine what resource is being accessed:
+
+`+"```rust"+`
+if uri.starts_with("custom://") {
+    let path = uri.strip_prefix("custom://").unwrap_or("");
+    // Handle custom:// resources
+}
+`+"```"+`
+
+### Metadata Schema
+
+For Rust drivers, you need to manually maintain the `+"`metadata.json`"+` file.
+Make sure to define:
+
+- `+"`driverClass`"+`: The driver class (e.g., "io.resource")
+- `+"`uriPatterns`"+`: URI patterns this driver handles
+- `+"`permissions`"+`: Permissions this driver exposes to apps
+
+Example:
+
+`+"```json"+`
+{
+  "driverClass": "%s",
+  "uriPatterns": ["%s"],
+  "permissions": [
+    {
+      "name": "read",
+      "description": "Read access",
+      "bit": 1
+    },
+    {
+      "name": "write",
+      "description": "Write access",
+      "bit": 2
+    }
+  ]
+}
+`+"```"+`
+
+## Build Process
+
+When you run `+"`wazeos drivers build`"+`, it:
+1. Detects Rust from `+"`Cargo.toml`"+`
+2. Compiles to WASM using `+"`cargo build --target wasm32-wasi --release`"+`
+3. Copies the WASM binary to `+"`app.wasm`"+`
+
+## Structure
+
+- `+"`src/main.rs`"+` - Driver implementation
+- `+"`Cargo.toml`"+` - Rust package manifest
+- `+"`metadata.json`"+` - Driver metadata (manually maintained)
+
+## Requirements
+
+- [Rust](https://rustup.rs/) with `+"`wasm32-wasi`"+` target
+- WazeOS CLI
+
+Install the WASM target:
+`+"```bash"+`
+rustup target add wasm32-wasi
+`+"```"+`
+
+## Author
+
+%s
+`, driverName, description, driverClass, patternsStr, patternsStr, driverClass, patterns[0], author)
+}
+
+func generateDriverGitignoreRust() string {
+	return `# Build artifacts
+app.wasm
+*.zip
+
+# Rust build
+/target/
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
 # OS files
 .DS_Store

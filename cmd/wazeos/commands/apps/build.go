@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/wazeos/wazeos/cmd/wazeos/commands/common"
 )
 
 var (
@@ -27,10 +28,14 @@ var buildCmd = &cobra.Command{
 	Long: `Build a WazeOS WASM application with automatic schema generation.
 
 This command:
-1. Scans your Go code for the Input struct
-2. Generates JSON Schema from struct tags
-3. Updates metadata.json with the schema
-4. Compiles to WASM using TinyGo
+1. Detects your project language (Go or Rust)
+2. For Go: Scans your code for the Input struct and generates JSON Schema
+3. For Rust: Uses manual schema definition from metadata.json
+4. Compiles to WASM using the appropriate toolchain
+
+Supported Languages:
+  - Go (via TinyGo)
+  - Rust (via Cargo with wasm32-wasi target)
 
 Examples:
   # Build app in current directory
@@ -39,7 +44,7 @@ Examples:
   # Build app in specific directory
   wazeos apps build bin/mycompany/myapp
 
-  # Specify custom input file
+  # Specify custom input file (Go only)
   wazeos apps build . --file handler.go`,
 	Args: cobra.MaximumNArgs(1),
 	Run:  runBuild,
@@ -66,56 +71,71 @@ func runBuild(cmd *cobra.Command, args []string) {
 
 	fmt.Printf("Building app in %s\n\n", absDir)
 
-	// Step 1: Find and validate files
-	mainFile := filepath.Join(absDir, buildFile)
-	metadataFile := filepath.Join(absDir, "metadata.json")
-
-	if _, err := os.Stat(mainFile); os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "Error: %s not found in %s\n", buildFile, absDir)
+	// Step 1: Detect language
+	fmt.Println("→ Detecting project language...")
+	lang, err := common.DetectLanguage(absDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+	fmt.Printf("  ✓ Detected language: %s\n", lang)
 
+	// Step 2: Validate metadata.json exists
+	metadataFile := filepath.Join(absDir, "metadata.json")
 	if _, err := os.Stat(metadataFile); os.IsNotExist(err) {
 		fmt.Fprintf(os.Stderr, "Error: metadata.json not found in %s\n", absDir)
 		fmt.Fprintf(os.Stderr, "Run 'wazeos apps new' to create a new app project\n")
 		os.Exit(1)
 	}
 
-	// Step 2: Extract schema from Input struct
-	fmt.Println("→ Extracting schema from Input struct...")
-	schema, err := extractSchemaFromFile(mainFile)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error extracting schema: %v\n", err)
-		os.Exit(1)
+	// Step 3: Extract schema (Go only for now)
+	var schema map[string]interface{}
+	if lang == common.LanguageGo {
+		fmt.Println("\n→ Extracting schema from Input struct...")
+		mainFile := filepath.Join(absDir, buildFile)
+
+		if _, err := os.Stat(mainFile); os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "Error: %s not found in %s\n", buildFile, absDir)
+			os.Exit(1)
+		}
+
+		schema, err = extractSchemaFromFile(mainFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error extracting schema: %v\n", err)
+			os.Exit(1)
+		}
+
+		if schema != nil {
+			fmt.Printf("  ✓ Found Input struct with %d field(s)\n", len(schema["properties"].(map[string]interface{})))
+		} else {
+			fmt.Println("  ℹ No Input struct found (empty input schema)")
+		}
+
+		// Update metadata.json with extracted schema
+		fmt.Println("\n→ Updating metadata.json...")
+		if err := updateMetadata(metadataFile, schema); err != nil {
+			fmt.Fprintf(os.Stderr, "Error updating metadata: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("  ✓ Updated metadata.json with schema")
+	} else if lang == common.LanguageRust {
+		fmt.Println("\n→ Schema extraction...")
+		fmt.Println("  ℹ Rust projects use manual schema definition in metadata.json")
+		fmt.Println("  ℹ Define your inputSchema in metadata.json before building")
 	}
 
-	if schema != nil {
-		fmt.Printf("  ✓ Found Input struct with %d field(s)\n", len(schema["properties"].(map[string]interface{})))
-	} else {
-		fmt.Println("  ℹ No Input struct found (empty input schema)")
-	}
-
-	// Step 3: Update metadata.json
-	fmt.Println("\n→ Updating metadata.json...")
-	if err := updateMetadata(metadataFile, schema); err != nil {
-		fmt.Fprintf(os.Stderr, "Error updating metadata: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Println("  ✓ Updated metadata.json with schema")
-
-	// Step 4: Check TinyGo
-	fmt.Println("\n→ Checking TinyGo installation...")
-	if err := checkTinyGo(); err != nil {
+	// Step 4: Check toolchain
+	fmt.Printf("\n→ Checking %s installation...\n", common.GetToolchainName(lang))
+	if err := common.CheckToolchain(lang); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Install TinyGo: https://tinygo.org/getting-started/install/\n")
 		os.Exit(1)
 	}
-	fmt.Println("  ✓ TinyGo found")
+	fmt.Printf("  ✓ %s found\n", common.GetToolchainName(lang))
 
 	// Step 5: Build WASM
 	fmt.Println("\n→ Compiling to WASM...")
 	outputPath := filepath.Join(absDir, buildOutput)
-	if err := buildWASM(mainFile, outputPath); err != nil {
+	if err := common.BuildWASM(lang, absDir, outputPath); err != nil {
 		fmt.Fprintf(os.Stderr, "Error building WASM: %v\n", err)
 		os.Exit(1)
 	}
