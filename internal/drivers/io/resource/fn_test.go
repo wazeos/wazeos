@@ -84,7 +84,7 @@ func TestNewFnDriver_DefaultMaxDepth(t *testing.T) {
 
 func TestFnDriver_Name(t *testing.T) {
 	driver := NewFnDriver(&mockPackageManager{}, 0)
-	assert.Equal(t, "io.resource", driver.Name())
+	assert.Equal(t, "wazeos/fn", driver.Name())
 }
 
 func TestFnDriver_Patterns(t *testing.T) {

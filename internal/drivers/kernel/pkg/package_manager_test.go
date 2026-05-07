@@ -391,7 +391,9 @@ func TestPackageManager_Install_WithDependency(t *testing.T) {
 		Version: "1.0.0",
 		Author:  "author",
 		DependenciesV2: &types.PackageDependencies{
-			Apps: map[string]string{depMetadata.Name: depMetadata.Version},
+			Apps: map[string]string{
+				fmt.Sprintf("%s/%s", depMetadata.Author, depMetadata.Name): depMetadata.Version,
+			},
 		},
 	}
 
@@ -520,7 +522,9 @@ func TestPackageManager_Uninstall_HasDependents(t *testing.T) {
 		Version: "1.0.0",
 		Author:  "author",
 		DependenciesV2: &types.PackageDependencies{
-			Apps: map[string]string{base.Name: base.Version},
+			Apps: map[string]string{
+				fmt.Sprintf("%s/%s", base.Author, base.Name): base.Version,
+			},
 		},
 	}
 
