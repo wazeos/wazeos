@@ -200,7 +200,7 @@ func (io *realIOClient) ReadFile(path string) ([]byte, error) {
 		Method:     "READ",
 		Headers:    make(map[string]string),
 		Body:       nil,
-		Permissions: []string{"read"},
+		Permissions: nil, // Driver validates based on Method
 	})
 
 	if err != nil {
@@ -221,7 +221,7 @@ func (io *realIOClient) WriteFile(path string, data []byte) error {
 		Method:     "WRITE",
 		Headers:    make(map[string]string),
 		Body:       data,
-		Permissions: []string{"write"},
+		Permissions: nil, // Driver validates based on Method
 	})
 
 	if err != nil {
@@ -242,7 +242,7 @@ func (io *realIOClient) DeleteFile(path string) error {
 		Method:     "DELETE",
 		Headers:    make(map[string]string),
 		Body:       nil,
-		Permissions: []string{"write"},
+		Permissions: nil, // Driver validates based on Method
 	})
 
 	if err != nil {
@@ -263,7 +263,7 @@ func (io *realIOClient) ListFiles(dir string) ([]string, error) {
 		Method:     "LIST",
 		Headers:    make(map[string]string),
 		Body:       nil,
-		Permissions: []string{"read"},
+		Permissions: nil, // Driver validates based on Method
 	})
 
 	if err != nil {
@@ -306,7 +306,7 @@ func (io *realIOClient) Request(method, url string, body []byte, headers map[str
 		Method:     method,
 		Headers:    headers,
 		Body:       body,
-		Permissions: []string{"read"}, // HTTP requests use read permission
+		Permissions: nil, // Driver validates based on Method
 	})
 
 	if err != nil {
@@ -340,7 +340,7 @@ func (io *realIOClient) CallAppWithInput(appName string, input []byte, args ...s
 		Method:     "INVOKE",
 		Headers:    make(map[string]string),
 		Body:       input,
-		Permissions: []string{"invoke"},
+		Permissions: nil, // Driver validates based on Method
 	})
 
 	if err != nil {
@@ -392,7 +392,7 @@ func (io *realIOClient) PublishWithKey(topic, key string, message []byte) error 
 		Method:     "PRODUCE",
 		Headers:    make(map[string]string),
 		Body:       reqJSON,
-		Permissions: []string{"write"},
+		Permissions: nil, // Driver validates based on Method
 	})
 
 	if err != nil {
@@ -433,7 +433,7 @@ func (io *realIOClient) Consume(topic string, opts *ConsumeOptions) ([]*Message,
 		Method:     "CONSUME",
 		Headers:    make(map[string]string),
 		Body:       reqJSON,
-		Permissions: []string{"read"},
+		Permissions: nil, // Driver validates based on Method
 	})
 
 	if err != nil {
