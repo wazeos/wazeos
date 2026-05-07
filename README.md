@@ -144,11 +144,12 @@ See [docs/pattern-matching.md](docs/pattern-matching.md) for complete details.
 Pluggable components that implement system functionality:
 
 **I/O Drivers** (`internal/drivers/io/`):
-- `io.request.http`: HTTP request handling
-- `io.bus`: Core routing and pattern matching
+- HTTP driver (name: `wazeos/http`, class: `io.request`) - HTTP request handling
+- I/O bus (class: `io.bus`) - Core routing and pattern matching
+- Function driver (name: `wazeos/fn`, class: `io.resource`) - App-to-app calls
 
 **Runtime Drivers** (`internal/drivers/kernel/runtime/`):
-- `runtime.exec`: WebAssembly execution engine with TinyGo support
+- Exec driver (name: `wazeos/exec`, class: `runtime.exec`) - WebAssembly execution engine with TinyGo support
 
 **Security Drivers** (`internal/security/`):
 - `security.authz`: Authorization and credential injection
@@ -180,7 +181,7 @@ WazeOS enforces driver policies to ensure system integrity. Each driver class ha
 | `io.resource` | Many | Optional | Resource drivers for external I/O - multiple allowed, not required |
 | `io.request` | Many | Required | Request drivers for inbound requests - at least one required |
 | `runtime.exec` | One | Required | Runtime execution engine - exactly one required |
-| `pkgmgr` | One | Required | Package manager - exactly one required |
+| `pkg.install` | One | Required | Package manager - exactly one required |
 | `security.authz` | One | Required | Authorization engine - exactly one required |
 
 ### Policy Enforcement
@@ -196,15 +197,15 @@ WazeOS enforces driver policies to ensure system integrity. Each driver class ha
 **Example Violations:**
 ```bash
 # ERROR: Multiple io.bus drivers (cardinality violation)
-RegisterDriver(io.bus.memory)
-RegisterDriver(io.bus.redis)  // ❌ Violates "One" cardinality
+RegisterDriver(busDriver1)  // class: "io.bus"
+RegisterDriver(busDriver2)  // class: "io.bus" ❌ Violates "One" cardinality
 
 # ERROR: No runtime.exec driver (requirement violation)
 # System won't start if required drivers are missing ❌
 
 # OK: Multiple io.resource drivers (cardinality: Many)
-RegisterDriver(io.resource.s3)
-RegisterDriver(io.resource.gcs)  // ✓ Allowed
+RegisterDriver(s3Driver)   // class: "io.resource", name: "wazeos/s3"
+RegisterDriver(gcsDriver)  // class: "io.resource", name: "wazeos/gcs" ✓ Allowed
 ```
 
 ## URI Pattern Matching
@@ -383,18 +384,23 @@ Example:
 ```go
 type MyDriver struct{}
 
+// Name returns the driver name in author/name format
 func (d *MyDriver) Name() string {
-    return "io.resource.mydriver"
+    return "mycompany/mydriver"
 }
 
+// Patterns returns URI patterns this driver handles
 func (d *MyDriver) Patterns() []string {
     return []string{"myscheme://*/*"}
 }
 
+// HandleCall processes resource calls
 func (d *MyDriver) HandleCall(ctx context.Context, call *types.ResourceCall) (*types.ResourceResult, error) {
     // Implementation
 }
 ```
+
+Note: The driver class (e.g., "io.resource") is specified in the metadata.json file when packaging the driver, not in the Name() method.
 
 ## Configuration
 

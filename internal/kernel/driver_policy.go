@@ -2,28 +2,10 @@ package kernel
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/wazeos/wazeos/internal/types"
 )
-
-// extractDriverClass extracts the base driver class from a full driver name.
-// Examples:
-//   - "io.request.http" → "io.request"
-//   - "io.resource" → "io.resource"
-//   - "runtime.exec" → "runtime.exec"
-func extractDriverClass(driverName string) string {
-	parts := strings.Split(driverName, ".")
-
-	// For io.* drivers, the base class is the first two segments
-	if len(parts) >= 2 && parts[0] == "io" {
-		return strings.Join(parts[:2], ".")
-	}
-
-	// For other drivers, use the full name as the class
-	return driverName
-}
 
 // defaultPolicyRegistry implements types.DriverPolicyRegistry.
 type defaultPolicyRegistry struct {
@@ -64,7 +46,7 @@ func NewDriverPolicyRegistry() types.DriverPolicyRegistry {
 			Description: "Runtime execution engine - exactly one required",
 		},
 		{
-			Class:       "pkgmgr",
+			Class:       "pkg.install",
 			Cardinality: types.CardinalityOne,
 			Requirement: types.RequirementRequired,
 			Description: "Package manager - exactly one required",

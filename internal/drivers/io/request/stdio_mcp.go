@@ -36,9 +36,9 @@ func NewStdioMCPDriver(
 	}
 }
 
-// Name returns the driver class.
+// Name returns the driver name.
 func (d *StdioMCPDriver) Name() string {
-	return "io.request.stdio"
+	return "wazeos/stdio"
 }
 
 // Patterns returns URI patterns this driver handles.

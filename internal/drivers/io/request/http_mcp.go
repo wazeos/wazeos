@@ -70,9 +70,9 @@ func NewHTTPMCPDriver(addr string, authn []types.SecurityAuthn, authz types.Secu
 	}
 }
 
-// Name returns the driver class.
+// Name returns the driver name.
 func (d *HTTPMCPDriver) Name() string {
-	return "io.request.http"
+	return "wazeos/http"
 }
 
 // Patterns returns URI patterns this driver handles.

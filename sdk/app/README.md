@@ -195,7 +195,7 @@ When a driver isn't installed, you'll see a clear message:
 FILE_READ_ERROR: no driver found for URI: file:///tmp/data.txt
 ```
 
-This tells you exactly which driver you need to install (`io.resource.file` in this case).
+This tells you that you need to install a resource driver (class: `io.resource`) that handles the `file://` scheme.
 
 ### Return Errors
 

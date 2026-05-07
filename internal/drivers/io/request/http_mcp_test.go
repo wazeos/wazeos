@@ -148,7 +148,7 @@ func TestNewHTTPMCPDriver_DefaultAddr(t *testing.T) {
 
 func TestHTTPMCPDriver_Name(t *testing.T) {
 	driver := NewHTTPMCPDriver("", nil, nil, &mockPackageManager{})
-	assert.Equal(t, "io.request.http", driver.Name())
+	assert.Equal(t, "wazeos/http", driver.Name())
 }
 
 func TestHTTPMCPDriver_Patterns(t *testing.T) {

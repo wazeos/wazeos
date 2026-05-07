@@ -82,7 +82,7 @@ func (m *mockSecurityAuthn) Authenticate(ctx context.Context, payload *types.Aut
 type mockSecurityAuthz struct{}
 
 func (m *mockSecurityAuthz) Name() string {
-	return "security.authz"
+	return "test/authz"
 }
 
 func (m *mockSecurityAuthz) GetPermissions(ctx context.Context, principal string) (*types.PermissionContext, error) {
@@ -100,7 +100,7 @@ func (m *mockSecurityAuthz) CheckAccess(uri string, requiredPermissions []string
 type mockPackageManager struct{}
 
 func (m *mockPackageManager) Name() string {
-	return "pkgmgr"
+	return "pkg.install"
 }
 
 func (m *mockPackageManager) Install(ctx context.Context, zipData []byte) (*types.AppMetadata, error) {
@@ -136,7 +136,7 @@ type mockRuntimeExec struct {
 }
 
 func (m *mockRuntimeExec) Name() string {
-	return "runtime.exec"
+	return "test/exec"
 }
 
 func (m *mockRuntimeExec) LoadApp(ctx context.Context, appID string, wasmBytes []byte) error {
@@ -243,8 +243,8 @@ func TestKernel_RegisterRequestDriver(t *testing.T) {
 func TestKernel_RegisterRequestDriver_Duplicate(t *testing.T) {
 	k := New()
 
-	driver1 := &mockRequestDriver{name: "io.request.test", patterns: []string{"*"}}
-	driver2 := &mockRequestDriver{name: "io.request.test", patterns: []string{"*"}}
+	driver1 := &mockRequestDriver{name: "test/request", patterns: []string{"*"}}
+	driver2 := &mockRequestDriver{name: "test/request", patterns: []string{"*"}}
 
 	err := k.RegisterRequestDriver(driver1)
 	assert.NoError(t, err)
@@ -258,7 +258,7 @@ func TestKernel_RegisterRequestDriver_AfterStart(t *testing.T) {
 	k := New()
 
 	// Set up required components
-	require.NoError(t, k.RegisterRequestDriver(&mockRequestDriver{name: "io.request.test", patterns: []string{"*"}}))
+	require.NoError(t, k.RegisterRequestDriver(&mockRequestDriver{name: "test/request", patterns: []string{"*"}}))
 	require.NoError(t, k.SetSecurityAuthz(&mockSecurityAuthz{}))
 	require.NoError(t, k.SetPackageManager(&mockPackageManager{}))
 	require.NoError(t, k.SetRuntimeExec(&mockRuntimeExec{}))
@@ -393,7 +393,7 @@ func TestKernel_SetTelemetry_Nil(t *testing.T) {
 func TestKernel_Start(t *testing.T) {
 	k := New()
 
-	requestDriver := &mockRequestDriver{name: "io.request.test", patterns: []string{"*"}}
+	requestDriver := &mockRequestDriver{name: "test/request", patterns: []string{"*"}}
 	require.NoError(t, k.RegisterRequestDriver(requestDriver))
 	require.NoError(t, k.SetSecurityAuthz(&mockSecurityAuthz{}))
 	require.NoError(t, k.SetPackageManager(&mockPackageManager{}))
@@ -426,7 +426,7 @@ func TestKernel_Start_MissingComponents(t *testing.T) {
 		{
 			name: "missing runtime exec",
 			setup: func(k types.Kernel) {
-				_ = k.RegisterRequestDriver(&mockRequestDriver{name: "io.request.test", patterns: []string{"*"}})
+				_ = k.RegisterRequestDriver(&mockRequestDriver{name: "test/request", patterns: []string{"*"}})
 				_ = k.SetSecurityAuthz(&mockSecurityAuthz{})
 				_ = k.SetPackageManager(&mockPackageManager{})
 			},
@@ -435,7 +435,7 @@ func TestKernel_Start_MissingComponents(t *testing.T) {
 		{
 			name: "missing authz",
 			setup: func(k types.Kernel) {
-				_ = k.RegisterRequestDriver(&mockRequestDriver{name: "io.request.test", patterns: []string{"*"}})
+				_ = k.RegisterRequestDriver(&mockRequestDriver{name: "test/request", patterns: []string{"*"}})
 				_ = k.SetRuntimeExec(&mockRuntimeExec{})
 				_ = k.SetPackageManager(&mockPackageManager{})
 			},
@@ -444,7 +444,7 @@ func TestKernel_Start_MissingComponents(t *testing.T) {
 		{
 			name: "missing package manager",
 			setup: func(k types.Kernel) {
-				_ = k.RegisterRequestDriver(&mockRequestDriver{name: "io.request.test", patterns: []string{"*"}})
+				_ = k.RegisterRequestDriver(&mockRequestDriver{name: "test/request", patterns: []string{"*"}})
 				_ = k.SetSecurityAuthz(&mockSecurityAuthz{})
 				_ = k.SetRuntimeExec(&mockRuntimeExec{})
 			},
@@ -477,7 +477,7 @@ func TestKernel_Start_MissingComponents(t *testing.T) {
 func TestKernel_Start_AlreadyStarted(t *testing.T) {
 	k := New()
 
-	require.NoError(t, k.RegisterRequestDriver(&mockRequestDriver{name: "io.request.test", patterns: []string{"*"}}))
+	require.NoError(t, k.RegisterRequestDriver(&mockRequestDriver{name: "test/request", patterns: []string{"*"}}))
 	require.NoError(t, k.SetSecurityAuthz(&mockSecurityAuthz{}))
 	require.NoError(t, k.SetPackageManager(&mockPackageManager{}))
 	require.NoError(t, k.SetRuntimeExec(&mockRuntimeExec{}))
@@ -497,7 +497,7 @@ func TestKernel_Start_AlreadyStarted(t *testing.T) {
 func TestKernel_Stop(t *testing.T) {
 	k := New()
 
-	requestDriver := &mockRequestDriver{name: "io.request.test", patterns: []string{"*"}}
+	requestDriver := &mockRequestDriver{name: "test/request", patterns: []string{"*"}}
 	require.NoError(t, k.RegisterRequestDriver(requestDriver))
 	require.NoError(t, k.SetSecurityAuthz(&mockSecurityAuthz{}))
 	require.NoError(t, k.SetPackageManager(&mockPackageManager{}))
@@ -564,7 +564,7 @@ type failingRuntimeExec struct {
 }
 
 func (f *failingRuntimeExec) Name() string {
-	return "runtime.exec"
+	return "test/exec"
 }
 
 func (f *failingRuntimeExec) LoadApp(ctx context.Context, appID string, wasmBytes []byte) error {
@@ -635,7 +635,7 @@ func newTrackingRuntimeExec() *trackingRuntimeExec {
 }
 
 func (t *trackingRuntimeExec) Name() string {
-	return "runtime.exec"
+	return "test/exec"
 }
 
 func (t *trackingRuntimeExec) LoadApp(ctx context.Context, appID string, wasmBytes []byte) error {
@@ -691,7 +691,7 @@ func TestKernel_RegisterHostFunctions(t *testing.T) {
 	require.NoError(t, err)
 
 	err = k.RegisterRequestDriver(&mockRequestDriver{
-		name:     "io.request.http",
+		name:     "test/http",
 		patterns: []string{"http://*"},
 	})
 	require.NoError(t, err)
@@ -714,7 +714,7 @@ func TestKernel_HostResourceCall(t *testing.T) {
 
 	// Set up resource bus with a mock driver
 	mockDriver := &mockResourceDriver{
-		name:     "io.resource.test",
+		name:     "test/resource",
 		patterns: []string{"test://*"},
 	}
 	k.resourceBus = bus.New(nil)

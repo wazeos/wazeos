@@ -18,7 +18,7 @@ func TestNewAuthz(t *testing.T) {
 
 func TestAuthz_Name(t *testing.T) {
 	authz := NewAuthz()
-	assert.Equal(t, "security.authz", authz.Name())
+	assert.Equal(t, "wazeos/authz", authz.Name())
 }
 
 func TestAuthz_SetPermissions(t *testing.T) {

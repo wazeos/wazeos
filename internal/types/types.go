@@ -463,7 +463,7 @@ type ResourceBus interface {
 
 // RequestDriver handles inbound MCP tool calls.
 type RequestDriver interface {
-	// Name returns the driver class (e.g., "io.request.http").
+	// Name returns the driver name in author/name format (e.g., "wazeos/http").
 	Name() string
 
 	// Patterns returns URI patterns this driver handles.
@@ -482,7 +482,7 @@ type RequestDriver interface {
 
 // ResourceDriver handles outbound IO calls from wasm apps.
 type ResourceDriver interface {
-	// Name returns the driver class (e.g., "io.resource.file").
+	// Name returns the driver name in author/name format (e.g., "wazeos/file").
 	Name() string
 
 	// Patterns returns URI patterns this driver handles.
@@ -494,7 +494,7 @@ type ResourceDriver interface {
 
 // SecurityAuthn extracts principals from requests.
 type SecurityAuthn interface {
-	// Name returns the driver class (e.g., "security.authn.basic").
+	// Name returns the driver name in author/name format (e.g., "wazeos/authn").
 	Name() string
 
 	// Authenticate attempts to extract a principal from the request payload.
@@ -522,7 +522,7 @@ type SecurityAuthz interface {
 
 // PackageManager manages app installation and lifecycle.
 type PackageManager interface {
-	// Name returns "pkgmgr".
+	// Name returns "pkg.install".
 	Name() string
 
 	// Install installs an app from a zip file.
@@ -745,7 +745,7 @@ type AppInvokeAuditEvent struct {
 
 // AuditDriver is the interface for audit/logging drivers.
 type AuditDriver interface {
-	// Name returns the driver class (e.g., "security.audit.syslog").
+	// Name returns the driver name in author/name format (e.g., "wazeos/audit").
 	Name() string
 
 	// RecordResourceCall logs a resource call event.

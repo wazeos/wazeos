@@ -78,7 +78,7 @@ func TestRuntimeExec_Name(t *testing.T) {
 	exec := NewRuntimeExec(0)
 	defer exec.Close(context.Background())
 
-	assert.Equal(t, "runtime.exec", exec.Name())
+	assert.Equal(t, "wazeos/exec", exec.Name())
 }
 
 func TestRuntimeExec_LoadApp_Success(t *testing.T) {

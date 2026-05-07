@@ -27,7 +27,8 @@ type kernel struct {
 
 	// Driver policy management
 	policyRegistry types.DriverPolicyRegistry
-	driverCounts   map[string]int // driver class -> count
+	driverCounts   map[string]int    // driver class -> count
+	driverNames    map[string]string // driver name -> driver type (for duplicate checking)
 
 	// State
 	started bool
@@ -41,6 +42,8 @@ func New() types.Kernel {
 	// The internal resource bus counts as the io.bus driver
 	driverCounts["io.bus"] = 1
 
+	driverNames := make(map[string]string)
+
 	return &kernel{
 		requestDrivers: make([]types.RequestDriver, 0),
 		resourceBus: bus.New(&bus.Config{
@@ -52,6 +55,7 @@ func New() types.Kernel {
 		authnDrivers:   make([]types.SecurityAuthn, 0),
 		policyRegistry: NewDriverPolicyRegistry(),
 		driverCounts:   driverCounts,
+		driverNames:    driverNames,
 	}
 }
 
@@ -68,15 +72,14 @@ func (k *kernel) RegisterRequestDriver(driver types.RequestDriver) error {
 		return fmt.Errorf("driver cannot be nil")
 	}
 
-	// Check for duplicate driver names
-	for _, existing := range k.requestDrivers {
-		if existing.Name() == driver.Name() {
-			return fmt.Errorf("request driver %q already registered", driver.Name())
-		}
+	// Check for duplicate driver name
+	driverName := driver.Name()
+	if existingType, exists := k.driverNames[driverName]; exists {
+		return fmt.Errorf("driver %q already registered as %s", driverName, existingType)
 	}
 
-	// Track driver count by class
-	driverClass := extractDriverClass(driver.Name())
+	// All request drivers have class "io.request"
+	driverClass := "io.request"
 	k.driverCounts[driverClass]++
 
 	// Validate cardinality policy (before adding)
@@ -85,6 +88,8 @@ func (k *kernel) RegisterRequestDriver(driver types.RequestDriver) error {
 		return fmt.Errorf("policy violation: %w", err)
 	}
 
+	// Register driver name
+	k.driverNames[driverName] = "request"
 	k.requestDrivers = append(k.requestDrivers, driver)
 	return nil
 }
@@ -102,8 +107,14 @@ func (k *kernel) RegisterResourceDriver(driver types.ResourceDriver) error {
 		return fmt.Errorf("driver cannot be nil")
 	}
 
-	// Track driver count by class
-	driverClass := extractDriverClass(driver.Name())
+	// Check for duplicate driver name
+	driverName := driver.Name()
+	if existingType, exists := k.driverNames[driverName]; exists {
+		return fmt.Errorf("driver %q already registered as %s", driverName, existingType)
+	}
+
+	// All resource drivers have class "io.resource"
+	driverClass := "io.resource"
 	k.driverCounts[driverClass]++
 
 	// Validate cardinality policy (before adding)
@@ -111,6 +122,9 @@ func (k *kernel) RegisterResourceDriver(driver types.ResourceDriver) error {
 		k.driverCounts[driverClass]-- // Rollback
 		return fmt.Errorf("policy violation: %w", err)
 	}
+
+	// Register driver name
+	k.driverNames[driverName] = "resource"
 
 	return k.resourceBus.RegisterDriver(driver)
 }
@@ -179,7 +193,7 @@ func (k *kernel) SetPackageManager(pkg types.PackageManager) error {
 	}
 
 	k.pkg = pkg
-	k.driverCounts["pkgmgr"] = 1
+	k.driverCounts["pkg.install"] = 1
 	return nil
 }
 

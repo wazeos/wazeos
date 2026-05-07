@@ -58,7 +58,7 @@ func NewExecDriver(packageMgr types.PackageManager, resourceBus types.ResourceBu
 
 // Name returns the driver name
 func (d *ExecDriver) Name() string {
-	return "runtime.exec"
+	return "wazeos/exec"
 }
 
 // Patterns returns URI patterns this driver handles

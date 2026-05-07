@@ -30,9 +30,9 @@ func NewFnDriver(pkgManager types.PackageManager, maxDepth int) *FnDriver {
 	}
 }
 
-// Name returns the driver class.
+// Name returns the driver name.
 func (f *FnDriver) Name() string {
-	return "io.resource"
+	return "wazeos/fn"
 }
 
 // Patterns returns URI patterns this driver handles.

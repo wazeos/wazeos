@@ -115,7 +115,7 @@ func TestNewPackageManager(t *testing.T) {
 	pm, err := NewPackageManager(tmpDir, runtime)
 	assert.NoError(t, err)
 	assert.NotNil(t, pm)
-	assert.Equal(t, "pkgmgr", pm.Name())
+	assert.Equal(t, "pkg.install", pm.Name())
 
 	// Verify directory was created
 	_, err = os.Stat(tmpDir)
@@ -789,7 +789,7 @@ func TestPackageManager_SeparateAppsAndDrivers(t *testing.T) {
 		Version:     "2.0.0",
 		Author:      "driverauthor",
 		Type:        "driver",
-		DriverClass: "io.resource.custom",
+		DriverClass: "io.resource",
 	}
 	driverZip, err := createTestZip(driverMetadata, wasmData)
 	require.NoError(t, err)
@@ -855,7 +855,7 @@ func TestPackageManager_LoadExistingAppsAndDrivers(t *testing.T) {
 		Version:     "1.0.0",
 		Author:      "author",
 		Type:        "driver",
-		DriverClass: "io.resource.test",
+		DriverClass: "io.resource",
 	}
 	driverZip, err := createTestZip(driverMetadata, wasmData)
 	require.NoError(t, err)

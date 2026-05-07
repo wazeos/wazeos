@@ -52,9 +52,9 @@ func NewRuntimeExec(timeout time.Duration) *RuntimeExec {
 	}
 }
 
-// Name returns the driver class.
+// Name returns the driver name.
 func (r *RuntimeExec) Name() string {
-	return "runtime.exec"
+	return "wazeos/exec"
 }
 
 // SetResourceBus provides access to the resource driver bus.

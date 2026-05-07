@@ -29,7 +29,7 @@ func TestNewStdioMCPDriver(t *testing.T) {
 
 func TestStdioMCPDriver_Name(t *testing.T) {
 	driver := NewStdioMCPDriver(nil, nil, &mockPackageManager{})
-	assert.Equal(t, "io.request.stdio", driver.Name())
+	assert.Equal(t, "wazeos/stdio", driver.Name())
 }
 
 func TestStdioMCPDriver_Patterns(t *testing.T) {
