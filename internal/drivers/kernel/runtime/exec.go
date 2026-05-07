@@ -11,6 +11,7 @@ import (
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 	"github.com/wazeos/wazeos/internal/types"
+	"github.com/xeipuuv/gojsonschema"
 )
 
 // ExecDriver handles fn:// calls - app execution requests
@@ -158,6 +159,34 @@ func (d *ExecDriver) HandleCall(ctx context.Context, call *types.ResourceCall) (
 			}, nil
 		}
 		fmt.Printf("[EXEC]   Arguments: %d provided\n", len(args))
+	}
+
+	// Validate arguments against input schema if defined
+	if appMetadata.InputSchema != nil && len(*appMetadata.InputSchema) > 0 {
+		schemaLoader := gojsonschema.NewBytesLoader(*appMetadata.InputSchema)
+		argsLoader := gojsonschema.NewGoLoader(args)
+
+		result, err := gojsonschema.Validate(schemaLoader, argsLoader)
+		if err != nil {
+			return &types.ResourceResult{
+				StatusCode: 500,
+				Body:       []byte(fmt.Sprintf(`{"error":"schema validation error: %v"}`, err)),
+			}, nil
+		}
+
+		if !result.Valid() {
+			// Collect all validation errors
+			errorMessages := make([]string, 0, len(result.Errors()))
+			for _, desc := range result.Errors() {
+				errorMessages = append(errorMessages, desc.String())
+			}
+			detailsJSON, _ := json.Marshal(errorMessages)
+			return &types.ResourceResult{
+				StatusCode: 400,
+				Body:       []byte(fmt.Sprintf(`{"error":"input validation failed","details":%s}`, detailsJSON)),
+			}, nil
+		}
+		fmt.Printf("[EXEC]   ✓ Input validation passed\n")
 	}
 
 	// Get WASM binary from package manager

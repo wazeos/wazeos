@@ -699,10 +699,13 @@ func (api *ManagementAPI) handleToolsList(w http.ResponseWriter, r *http.Request
 			"description": app.Description,
 		}
 
-		// TODO: Add inputSchema from app metadata when schema support is implemented
-		// if app.Metadata.InputSchema != nil {
-		//     tool["inputSchema"] = app.Metadata.InputSchema
-		// }
+		// Add inputSchema from app metadata if defined
+		if app.InputSchema != nil && len(*app.InputSchema) > 0 {
+			var schema interface{}
+			if err := json.Unmarshal(*app.InputSchema, &schema); err == nil {
+				tool["inputSchema"] = schema
+			}
+		}
 
 		tools = append(tools, tool)
 	}
