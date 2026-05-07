@@ -151,23 +151,37 @@ func (c *Context) HasPermission(uriPattern string, mode string) bool {
 		return false
 	}
 
-	// Parse mode string into AccessBits
-	var required driver.AccessBits
+	// Parse mode string into permission names
+	var requiredPerms []string
 	for _, char := range mode {
 		switch char {
 		case 'r':
-			required |= driver.AccessRead
+			requiredPerms = append(requiredPerms, "read")
 		case 'w':
-			required |= driver.AccessWrite
+			requiredPerms = append(requiredPerms, "write")
 		case 'x':
-			required |= driver.AccessExecute
+			requiredPerms = append(requiredPerms, "execute")
 		}
 	}
 
-	// Check if any permission entry matches the pattern
+	// Check if any permission entry matches the pattern and has all required permissions
 	for _, entry := range c.Permissions.Entries {
 		if matchesPattern(entry.URIPattern, uriPattern) {
-			if entry.Access.Has(required) {
+			hasAll := true
+			for _, req := range requiredPerms {
+				found := false
+				for _, perm := range entry.Permissions {
+					if perm == req {
+						found = true
+						break
+					}
+				}
+				if !found {
+					hasAll = false
+					break
+				}
+			}
+			if hasAll {
 				return true
 			}
 		}

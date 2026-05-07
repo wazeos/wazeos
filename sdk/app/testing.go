@@ -243,38 +243,36 @@ func TestContextWithPermissions(entries []driver.PermissionEntry) *Context {
 // Example helper for creating permission entries in tests
 
 // AllowFile creates a permission entry for file access.
-func AllowFile(pattern string, mode string) driver.PermissionEntry {
-	var access driver.AccessBits
-	for _, char := range mode {
-		switch char {
-		case 'r':
-			access |= driver.AccessRead
-		case 'w':
-			access |= driver.AccessWrite
-		case 'x':
-			access |= driver.AccessExecute
-		}
+func AllowFile(pattern string, permissions ...string) driver.PermissionEntry {
+	// Default to read/write if no permissions specified
+	if len(permissions) == 0 {
+		permissions = []string{"read", "write"}
 	}
 
 	return driver.PermissionEntry{
-		URIPattern: fmt.Sprintf("file://%s", pattern),
-		Access:     access,
+		URIPattern:  fmt.Sprintf("file://%s", pattern),
+		Permissions: permissions,
 	}
 }
 
 // AllowHTTP creates a permission entry for HTTP access.
-func AllowHTTP(pattern string) driver.PermissionEntry {
+func AllowHTTP(pattern string, methods ...string) driver.PermissionEntry {
+	// Default to GET if no methods specified
+	if len(methods) == 0 {
+		methods = []string{"GET"}
+	}
+
 	return driver.PermissionEntry{
-		URIPattern: pattern,
-		Access:     driver.AccessRead,
+		URIPattern:  pattern,
+		Permissions: methods,
 	}
 }
 
 // AllowApp creates a permission entry for app calls.
 func AllowApp(pattern string) driver.PermissionEntry {
 	return driver.PermissionEntry{
-		URIPattern: fmt.Sprintf("fn://%s", pattern),
-		Access:     driver.AccessExecute,
+		URIPattern:  fmt.Sprintf("fn://%s", pattern),
+		Permissions: []string{"invoke"},
 	}
 }
 

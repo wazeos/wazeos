@@ -71,24 +71,6 @@ type IOOperation struct {
 //	    "message": "test",
 //	})
 func (op *IOOperation) Call(args map[string]interface{}) (map[string]interface{}, error) {
-	// Convert permissions to AccessBits for the driver call
-	var accessMode driver.AccessBits
-	for _, perm := range op.permissions {
-		// Map permission strings to access bits
-		switch strings.ToLower(perm) {
-		case "read", "get", "list", "consume":
-			accessMode |= driver.AccessRead
-		case "write", "post", "put", "patch", "create", "produce", "delete":
-			accessMode |= driver.AccessWrite
-		case "invoke", "execute":
-			accessMode |= driver.AccessExecute
-		default:
-			// For driver-specific permissions (like HTTP methods), use read by default
-			// The driver will validate the specific permission
-			accessMode |= driver.AccessRead
-		}
-	}
-
 	// Encode args as JSON for the driver call
 	var body []byte
 	var headers map[string]string
@@ -123,13 +105,13 @@ func (op *IOOperation) Call(args map[string]interface{}) (map[string]interface{}
 		method = strings.ToUpper(op.permissions[0])
 	}
 
-	// Make the driver call
+	// Make the driver call with permission strings
 	result, err := driver.CallResourceCall(&driver.ResourceCall{
-		URI:        op.uri,
-		Method:     method,
-		Headers:    headers,
-		Body:       body,
-		AccessMode: accessMode,
+		URI:         op.uri,
+		Method:      method,
+		Headers:     headers,
+		Body:        body,
+		Permissions: op.permissions,
 	})
 
 	if err != nil {
@@ -218,7 +200,7 @@ func (io *realIOClient) ReadFile(path string) ([]byte, error) {
 		Method:     "READ",
 		Headers:    make(map[string]string),
 		Body:       nil,
-		AccessMode: driver.AccessRead,
+		Permissions: []string{"read"},
 	})
 
 	if err != nil {
@@ -239,7 +221,7 @@ func (io *realIOClient) WriteFile(path string, data []byte) error {
 		Method:     "WRITE",
 		Headers:    make(map[string]string),
 		Body:       data,
-		AccessMode: driver.AccessWrite,
+		Permissions: []string{"write"},
 	})
 
 	if err != nil {
@@ -260,7 +242,7 @@ func (io *realIOClient) DeleteFile(path string) error {
 		Method:     "DELETE",
 		Headers:    make(map[string]string),
 		Body:       nil,
-		AccessMode: driver.AccessWrite,
+		Permissions: []string{"write"},
 	})
 
 	if err != nil {
@@ -281,7 +263,7 @@ func (io *realIOClient) ListFiles(dir string) ([]string, error) {
 		Method:     "LIST",
 		Headers:    make(map[string]string),
 		Body:       nil,
-		AccessMode: driver.AccessRead,
+		Permissions: []string{"read"},
 	})
 
 	if err != nil {
@@ -324,7 +306,7 @@ func (io *realIOClient) Request(method, url string, body []byte, headers map[str
 		Method:     method,
 		Headers:    headers,
 		Body:       body,
-		AccessMode: driver.AccessRead, // HTTP requests use read permission
+		Permissions: []string{"read"}, // HTTP requests use read permission
 	})
 
 	if err != nil {
@@ -358,7 +340,7 @@ func (io *realIOClient) CallAppWithInput(appName string, input []byte, args ...s
 		Method:     "INVOKE",
 		Headers:    make(map[string]string),
 		Body:       input,
-		AccessMode: driver.AccessExecute,
+		Permissions: []string{"invoke"},
 	})
 
 	if err != nil {
@@ -410,7 +392,7 @@ func (io *realIOClient) PublishWithKey(topic, key string, message []byte) error 
 		Method:     "PRODUCE",
 		Headers:    make(map[string]string),
 		Body:       reqJSON,
-		AccessMode: driver.AccessWrite,
+		Permissions: []string{"write"},
 	})
 
 	if err != nil {
@@ -451,7 +433,7 @@ func (io *realIOClient) Consume(topic string, opts *ConsumeOptions) ([]*Message,
 		Method:     "CONSUME",
 		Headers:    make(map[string]string),
 		Body:       reqJSON,
-		AccessMode: driver.AccessRead,
+		Permissions: []string{"read"},
 	})
 
 	if err != nil {
@@ -477,27 +459,15 @@ func (io *realIOClient) Call(uri, method string, body []byte, headers map[string
 		headers = make(map[string]string)
 	}
 
-	// Determine access mode based on method
-	var accessMode driver.AccessBits
-	switch strings.ToUpper(method) {
-	case "READ", "GET", "LIST":
-		accessMode = driver.AccessRead
-	case "WRITE", "POST", "PUT", "PATCH", "CREATE":
-		accessMode = driver.AccessWrite
-	case "DELETE":
-		accessMode = driver.AccessWrite
-	case "INVOKE", "EXECUTE":
-		accessMode = driver.AccessExecute
-	default:
-		accessMode = driver.AccessRead // Default to read
-	}
+	// Pass the method as a permission
+	permissions := []string{method}
 
 	result, err := driver.CallResourceCall(&driver.ResourceCall{
-		URI:        uri,
-		Method:     method,
-		Headers:    headers,
-		Body:       body,
-		AccessMode: accessMode,
+		URI:         uri,
+		Method:      method,
+		Headers:     headers,
+		Body:        body,
+		Permissions: permissions,
 	})
 
 	if err != nil {

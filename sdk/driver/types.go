@@ -8,45 +8,13 @@
 // - JSON serialization utilities
 package driver
 
-// AccessBits represents read, write, and execute permissions as a bitfield.
-type AccessBits uint8
-
-const (
-	AccessRead    AccessBits = 1 << 0 // 0x01
-	AccessWrite   AccessBits = 1 << 1 // 0x02
-	AccessExecute AccessBits = 1 << 2 // 0x04
-)
-
-// String returns a string representation of access bits (e.g., "rw", "rx", "rwx").
-func (a AccessBits) String() string {
-	var result string
-	if a&AccessRead != 0 {
-		result += "r"
-	}
-	if a&AccessWrite != 0 {
-		result += "w"
-	}
-	if a&AccessExecute != 0 {
-		result += "x"
-	}
-	if result == "" {
-		return "-"
-	}
-	return result
-}
-
-// Has checks if the access bits include the specified permission.
-func (a AccessBits) Has(permission AccessBits) bool {
-	return a&permission == permission
-}
-
 // ResourceCall represents an IO call from a wasm app to a resource driver.
 type ResourceCall struct {
-	URI        string            `json:"uri"`
-	Method     string            `json:"method"`
-	Headers    map[string]string `json:"headers"`
-	Body       []byte            `json:"body"`
-	AccessMode AccessBits        `json:"accessMode"`
+	URI         string            `json:"uri"`
+	Method      string            `json:"method"`
+	Headers     map[string]string `json:"headers"`
+	Body        []byte            `json:"body"`
+	Permissions []string          `json:"permissions"` // Required permissions for this call
 }
 
 // ResourceResult represents the result of a resource call.
@@ -121,8 +89,8 @@ type PermissionContext struct {
 
 // PermissionEntry represents a single URI-based access control entry.
 type PermissionEntry struct {
-	URIPattern string     `json:"uriPattern"` // URI pattern with wildcard support
-	Access     AccessBits `json:"access"`     // Allowed access bits
+	URIPattern  string   `json:"uriPattern"`  // URI pattern with wildcard support
+	Permissions []string `json:"permissions"` // Allowed permission names
 }
 
 // NewPermissionContext creates a new permission context.

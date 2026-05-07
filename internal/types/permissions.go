@@ -12,17 +12,17 @@ type PermissionDefinition struct {
 	Bit         uint64 `json:"bit"`         // Bit position (0-63)
 }
 
-// PermissionSchema defines the permission model for a driver class.
+// PermissionSchema defines the permission model for a URI scheme.
 type PermissionSchema struct {
-	DriverClass string                 `json:"driverClass"` // e.g., "io.resource.http"
+	Scheme      string                 `json:"scheme"`      // e.g., "file", "http", "https"
 	Permissions []PermissionDefinition `json:"permissions"`
 	nameToBit   map[string]uint64      // Internal lookup cache
 }
 
 // NewPermissionSchema creates a permission schema from definitions.
-func NewPermissionSchema(driverClass string, permissions []PermissionDefinition) *PermissionSchema {
+func NewPermissionSchema(scheme string, permissions []PermissionDefinition) *PermissionSchema {
 	schema := &PermissionSchema{
-		DriverClass: driverClass,
+		Scheme:      scheme,
 		Permissions: permissions,
 		nameToBit:   make(map[string]uint64),
 	}
@@ -55,7 +55,7 @@ func (s *PermissionSchema) ParsePermissions(names []string) (uint64, error) {
 	for _, name := range names {
 		bit, ok := s.nameToBit[name]
 		if !ok {
-			return 0, fmt.Errorf("unknown permission: %s for driver %s", name, s.DriverClass)
+			return 0, fmt.Errorf("unknown permission: %s for scheme %s://", name, s.Scheme)
 		}
 		access |= bit
 	}
@@ -73,10 +73,10 @@ func (s *PermissionSchema) GetPermissionNames(access uint64) []string {
 	return names
 }
 
-// PermissionRegistry manages permission schemas for all driver classes.
+// PermissionRegistry manages permission schemas for all URI schemes.
 type PermissionRegistry struct {
 	mu      sync.RWMutex
-	schemas map[string]*PermissionSchema // driverClass -> schema
+	schemas map[string]*PermissionSchema // scheme -> schema
 }
 
 var (
@@ -85,14 +85,14 @@ var (
 	}
 )
 
-// RegisterPermissionSchema registers a permission schema for a driver class.
+// RegisterPermissionSchema registers a permission schema for a URI scheme.
 func RegisterPermissionSchema(schema *PermissionSchema) error {
 	return globalPermissionRegistry.Register(schema)
 }
 
-// GetPermissionSchema retrieves the permission schema for a driver class.
-func GetPermissionSchema(driverClass string) (*PermissionSchema, bool) {
-	return globalPermissionRegistry.Get(driverClass)
+// GetPermissionSchema retrieves the permission schema for a URI scheme.
+func GetPermissionSchema(scheme string) (*PermissionSchema, bool) {
+	return globalPermissionRegistry.Get(scheme)
 }
 
 // Register registers a permission schema.
@@ -104,20 +104,20 @@ func (r *PermissionRegistry) Register(schema *PermissionSchema) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, exists := r.schemas[schema.DriverClass]; exists {
-		return fmt.Errorf("permission schema for driver class %q already registered", schema.DriverClass)
+	if _, exists := r.schemas[schema.Scheme]; exists {
+		return fmt.Errorf("permission schema for scheme %q already registered", schema.Scheme)
 	}
 
-	r.schemas[schema.DriverClass] = schema
+	r.schemas[schema.Scheme] = schema
 	return nil
 }
 
-// Get retrieves a permission schema by driver class.
-func (r *PermissionRegistry) Get(driverClass string) (*PermissionSchema, bool) {
+// Get retrieves a permission schema by URI scheme.
+func (r *PermissionRegistry) Get(scheme string) (*PermissionSchema, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	schema, ok := r.schemas[driverClass]
+	schema, ok := r.schemas[scheme]
 	return schema, ok
 }
 
@@ -133,10 +133,12 @@ func (r *PermissionRegistry) List() []*PermissionSchema {
 	return schemas
 }
 
-// Standard permission definitions for common driver types.
+// Standard permission definitions for common URI schemes.
+// These provide generic permission vocabularies. Installed drivers register
+// their own schemas (from metadata.json) by driver ID at installation time.
 
-// FilePermissions defines standard file system permissions.
-var FilePermissions = NewPermissionSchema("io.resource.file", []PermissionDefinition{
+// FilePermissions defines standard file:// scheme permissions.
+var FilePermissions = NewPermissionSchema("file", []PermissionDefinition{
 	{Name: "read", Description: "Read file contents", Bit: 1 << 0},
 	{Name: "write", Description: "Write/modify file contents", Bit: 1 << 1},
 	{Name: "execute", Description: "Execute file", Bit: 1 << 2},
@@ -144,8 +146,8 @@ var FilePermissions = NewPermissionSchema("io.resource.file", []PermissionDefini
 	{Name: "list", Description: "List directory contents", Bit: 1 << 4},
 })
 
-// HTTPPermissions defines HTTP method permissions.
-var HTTPPermissions = NewPermissionSchema("io.resource.http", []PermissionDefinition{
+// HTTPPermissions defines http:// and https:// scheme permissions.
+var HTTPPermissions = NewPermissionSchema("http", []PermissionDefinition{
 	{Name: "GET", Description: "HTTP GET requests", Bit: 1 << 0},
 	{Name: "POST", Description: "HTTP POST requests", Bit: 1 << 1},
 	{Name: "PUT", Description: "HTTP PUT requests", Bit: 1 << 2},
@@ -155,13 +157,24 @@ var HTTPPermissions = NewPermissionSchema("io.resource.http", []PermissionDefini
 	{Name: "HEAD", Description: "HTTP HEAD requests", Bit: 1 << 6},
 })
 
-// FnPermissions defines function call permissions.
-var FnPermissions = NewPermissionSchema("io.resource.fn", []PermissionDefinition{
+// HTTPSPermissions is an alias for HTTP (same permission vocabulary).
+var HTTPSPermissions = NewPermissionSchema("https", []PermissionDefinition{
+	{Name: "GET", Description: "HTTP GET requests", Bit: 1 << 0},
+	{Name: "POST", Description: "HTTP POST requests", Bit: 1 << 1},
+	{Name: "PUT", Description: "HTTP PUT requests", Bit: 1 << 2},
+	{Name: "DELETE", Description: "HTTP DELETE requests", Bit: 1 << 3},
+	{Name: "PATCH", Description: "HTTP PATCH requests", Bit: 1 << 4},
+	{Name: "OPTIONS", Description: "HTTP OPTIONS requests", Bit: 1 << 5},
+	{Name: "HEAD", Description: "HTTP HEAD requests", Bit: 1 << 6},
+})
+
+// FnPermissions defines fn:// scheme permissions.
+var FnPermissions = NewPermissionSchema("fn", []PermissionDefinition{
 	{Name: "invoke", Description: "Invoke other apps", Bit: 1 << 0},
 })
 
-// IPCPermissions defines IPC queue permissions.
-var IPCPermissions = NewPermissionSchema("kernel.ipc", []PermissionDefinition{
+// QueuePermissions defines queue:// scheme permissions.
+var QueuePermissions = NewPermissionSchema("queue", []PermissionDefinition{
 	{Name: "produce", Description: "Produce/send messages to queue", Bit: 1 << 0},
 	{Name: "consume", Description: "Consume/receive messages from queue", Bit: 1 << 1},
 	{Name: "create", Description: "Create new queues/topics", Bit: 1 << 2},
@@ -169,20 +182,21 @@ var IPCPermissions = NewPermissionSchema("kernel.ipc", []PermissionDefinition{
 	{Name: "admin", Description: "Administrative operations", Bit: 1 << 4},
 })
 
-// AuditPermissions defines audit log permissions.
-var AuditPermissions = NewPermissionSchema("kernel.security.audit", []PermissionDefinition{
-	{Name: "read", Description: "Read audit logs", Bit: 1 << 0},
-	{Name: "write", Description: "Write to audit log", Bit: 1 << 1},
-	{Name: "export", Description: "Export audit logs", Bit: 1 << 2},
-	{Name: "clear", Description: "Clear audit logs", Bit: 1 << 3},
+// IPCPermissions defines ipc:// scheme permissions.
+var IPCPermissions = NewPermissionSchema("ipc", []PermissionDefinition{
+	{Name: "produce", Description: "Produce/send messages", Bit: 1 << 0},
+	{Name: "consume", Description: "Consume/receive messages", Bit: 1 << 1},
+	{Name: "create", Description: "Create new IPC channels", Bit: 1 << 2},
+	{Name: "delete", Description: "Delete IPC channels", Bit: 1 << 3},
 	{Name: "admin", Description: "Administrative operations", Bit: 1 << 4},
 })
 
 func init() {
-	// Register standard permission schemas
+	// Register standard permission schemas for common URI schemes
 	RegisterPermissionSchema(FilePermissions)
 	RegisterPermissionSchema(HTTPPermissions)
+	RegisterPermissionSchema(HTTPSPermissions)
 	RegisterPermissionSchema(FnPermissions)
+	RegisterPermissionSchema(QueuePermissions)
 	RegisterPermissionSchema(IPCPermissions)
-	RegisterPermissionSchema(AuditPermissions)
 }

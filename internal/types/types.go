@@ -61,92 +61,56 @@ func (a AccessBits) Has(permission AccessBits) bool {
 
 // PermissionEntry represents a single URI-based access control entry.
 type PermissionEntry struct {
-	URIPattern string     // URI pattern with wildcard support (e.g., "file:///data/*")
-	Access     AccessBits // Allowed access bits
+	URIPattern  string   // URI pattern with wildcard support (e.g., "file:///data/*")
+	Permissions []string // Allowed permission names (e.g., ["read", "write"] or ["GET", "POST"])
 }
 
 // SetNamedPermissions sets permissions using driver-specific permission names.
-// The driver class is inferred from the URI pattern scheme.
+// Permissions are stored as strings and validated at runtime against the driver's schema.
 // Example: entry.SetNamedPermissions([]string{"GET", "POST"}) for "https://api.example.com/*"
 func (e *PermissionEntry) SetNamedPermissions(names []string) error {
-	// Extract driver class from URI pattern
-	driverClass := inferDriverClass(e.URIPattern)
-	if driverClass == "" {
-		return fmt.Errorf("cannot infer driver class from URI pattern: %s", e.URIPattern)
+	if len(names) == 0 {
+		return fmt.Errorf("no permissions specified")
 	}
-
-	schema, ok := GetPermissionSchema(driverClass)
-	if !ok {
-		// Fallback to standard rwx if no schema registered
-		if len(names) == 0 {
-			return fmt.Errorf("no permissions specified")
-		}
-		access, err := ParseAccessBits(names[0])
-		if err != nil {
-			return fmt.Errorf("unknown driver class %s and cannot parse as standard access: %w", driverClass, err)
-		}
-		e.Access = access
-		return nil
-	}
-
-	access, err := schema.ParsePermissions(names)
-	if err != nil {
-		return err
-	}
-
-	e.Access = AccessBits(access)
+	e.Permissions = names
 	return nil
 }
 
 // HasNamedPermission checks if a specific named permission is granted.
 func (e *PermissionEntry) HasNamedPermission(permissionName string) bool {
-	driverClass := inferDriverClass(e.URIPattern)
-	if driverClass == "" {
-		return false
+	for _, perm := range e.Permissions {
+		if perm == permissionName {
+			return true
+		}
 	}
-
-	schema, ok := GetPermissionSchema(driverClass)
-	if !ok {
-		return false
-	}
-
-	return schema.HasPermission(uint64(e.Access), permissionName)
+	return false
 }
 
 // GetPermissionNames returns the list of permission names granted by this entry.
 func (e *PermissionEntry) GetPermissionNames() []string {
-	driverClass := inferDriverClass(e.URIPattern)
-	if driverClass == "" {
-		return []string{}
-	}
-
-	schema, ok := GetPermissionSchema(driverClass)
-	if !ok {
-		// Fallback to standard rwx format
-		return []string{e.Access.String()}
-	}
-
-	return schema.GetPermissionNames(uint64(e.Access))
+	return e.Permissions
 }
 
-// inferDriverClass extracts the driver class from a URI pattern.
+// inferDriverClass extracts the generic driver class from a URI pattern.
+// Returns generic classes only - specific resource types are determined by URI patterns.
 // Examples:
-//   - "file:///data/*" -> "io.resource.file"
-//   - "https://api.example.com/*" -> "io.resource.http"
-//   - "fn://app-name/*" -> "io.resource.fn"
+//   - "file:///data/*" -> "io.resource"
+//   - "https://api.example.com/*" -> "io.resource"
+//   - "fn://app-name/*" -> "io.resource"
 //   - "queue://topic/*" -> "kernel.ipc"
 func inferDriverClass(uriPattern string) string {
-	if strings.HasPrefix(uriPattern, "file://") {
-		return "io.resource.file"
-	}
-	if strings.HasPrefix(uriPattern, "http://") || strings.HasPrefix(uriPattern, "https://") {
-		return "io.resource.http"
-	}
-	if strings.HasPrefix(uriPattern, "fn://") {
-		return "io.resource.fn"
+	if strings.HasPrefix(uriPattern, "file://") ||
+		strings.HasPrefix(uriPattern, "http://") ||
+		strings.HasPrefix(uriPattern, "https://") ||
+		strings.HasPrefix(uriPattern, "fn://") {
+		return "io.resource"
 	}
 	if strings.HasPrefix(uriPattern, "queue://") || strings.HasPrefix(uriPattern, "ipc://") {
 		return "kernel.ipc"
+	}
+	// Default to io.resource for custom schemes
+	if strings.Contains(uriPattern, "://") {
+		return "io.resource"
 	}
 	return ""
 }
@@ -161,6 +125,26 @@ func NewPermissionContext(entries []PermissionEntry) *PermissionContext {
 	return &PermissionContext{Entries: entries}
 }
 
+// intersectPermissions returns the intersection of two permission lists.
+func intersectPermissions(perms1, perms2 []string) []string {
+	result := []string{}
+	seen := make(map[string]bool)
+
+	// Add all perms from first list to map
+	for _, p := range perms1 {
+		seen[p] = true
+	}
+
+	// Add only perms that exist in both lists
+	for _, p := range perms2 {
+		if seen[p] {
+			result = append(result, p)
+		}
+	}
+
+	return result
+}
+
 // Intersect returns a new PermissionContext with the intersection of permissions.
 // Used when chaining fn:// calls to reduce permissions at each hop.
 func (pc *PermissionContext) Intersect(other *PermissionContext) *PermissionContext {
@@ -171,12 +155,12 @@ func (pc *PermissionContext) Intersect(other *PermissionContext) *PermissionCont
 	for _, entry1 := range pc.Entries {
 		for _, entry2 := range other.Entries {
 			if entry1.URIPattern == entry2.URIPattern {
-				// Intersection of access bits
-				intersectedAccess := entry1.Access & entry2.Access
-				if intersectedAccess != 0 {
+				// Intersection of permission names
+				intersectedPerms := intersectPermissions(entry1.Permissions, entry2.Permissions)
+				if len(intersectedPerms) > 0 {
 					result = append(result, PermissionEntry{
-						URIPattern: entry1.URIPattern,
-						Access:     intersectedAccess,
+						URIPattern:  entry1.URIPattern,
+						Permissions: intersectedPerms,
 					})
 				}
 			}

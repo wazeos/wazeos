@@ -47,12 +47,8 @@ func (rb *ResourceBus) RegisterDriver(driver types.ResourceDriver) error {
 		return fmt.Errorf("driver %q has no patterns", driver.Name())
 	}
 
-	// Check for duplicate driver names
-	for _, existing := range rb.drivers {
-		if existing.driver.Name() == driver.Name() {
-			return fmt.Errorf("resource driver %q already registered", driver.Name())
-		}
-	}
+	// Note: Multiple drivers with the same class (e.g., io.resource) are allowed.
+	// Routing is based on URI pattern matching, with most specific pattern taking priority.
 
 	// Parse patterns
 	parsedPatterns := make([]uriPattern, 0, len(patterns))

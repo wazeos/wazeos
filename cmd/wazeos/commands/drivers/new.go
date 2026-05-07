@@ -35,16 +35,16 @@ Examples:
   wazeos drivers new
 
   # With arguments
-  wazeos drivers new mycompany mydriver --driver-class=io.resource.custom
+  wazeos drivers new mycompany mydriver --driver-class=io.resource
 
   # With URI patterns
-  wazeos drivers new mycompany mydriver --driver-class=io.resource.custom --patterns=custom://**`,
+  wazeos drivers new mycompany mydriver --driver-class=io.resource --patterns=custom://**`,
 	Args: cobra.MaximumNArgs(2),
 	Run:  runNewDriver,
 }
 
 func init() {
-	newCmd.Flags().StringVar(&newDriverClass, "driver-class", "", "driver class (e.g., io.resource.custom)")
+	newCmd.Flags().StringVar(&newDriverClass, "driver-class", "", "driver class (e.g., io.resource, kernel.security.authn)")
 	newCmd.Flags().StringVar(&newDriverDescription, "description", "", "driver description")
 	newCmd.Flags().StringSliceVar(&newDriverPatterns, "patterns", nil, "URI patterns (e.g., custom://**)")
 }
@@ -78,7 +78,16 @@ func runNewDriver(cmd *cobra.Command, args []string) {
 
 	// Get driver class if not provided
 	if newDriverClass == "" {
-		newDriverClass = promptRequired("Driver class (e.g., io.resource.custom)")
+		fmt.Println("\nStandard driver classes:")
+		fmt.Println("  io.resource             - Resource driver (files, HTTP, databases, caches, etc.)")
+		fmt.Println("                            URI patterns determine the specific resource type")
+		fmt.Println("  io.function             - Function execution driver")
+		fmt.Println("  kernel.security.authn   - Authentication provider")
+		fmt.Println("  kernel.security.authz   - Authorization/permissions provider")
+		fmt.Println("  kernel.security.audit   - Audit logging driver")
+		fmt.Println("  kernel.ipc              - Inter-process communication / message queues")
+		fmt.Println()
+		newDriverClass = promptRequired("Driver class")
 	}
 
 	// Get description if not provided
@@ -91,7 +100,17 @@ func runNewDriver(cmd *cobra.Command, args []string) {
 	patterns := newDriverPatterns
 	if len(patterns) == 0 {
 		// Default pattern based on driver class
-		patterns = []string{fmt.Sprintf("%s://**", strings.TrimPrefix(newDriverClass, "io.resource."))}
+		switch newDriverClass {
+		case "io.resource":
+			patterns = []string{"custom://**"}
+		case "io.function":
+			patterns = []string{"fn://**"}
+		case "kernel.ipc":
+			patterns = []string{"queue://**"}
+		default:
+			// For other classes (security, audit, etc.), use a generic pattern
+			patterns = []string{fmt.Sprintf("%s://**", driverName)}
+		}
 	}
 
 	// Create project directory
