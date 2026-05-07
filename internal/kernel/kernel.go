@@ -7,7 +7,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/wazeos/wazeos/internal/kernel/iobus"
+	"github.com/wazeos/wazeos/internal/bus"
 	"github.com/wazeos/wazeos/internal/types"
 )
 
@@ -17,7 +17,7 @@ type kernel struct {
 
 	// Drivers
 	requestDrivers []types.RequestDriver
-	resourceBus    *iobus.Bus
+	resourceBus    *bus.Bus
 	authnDrivers   []types.SecurityAuthn
 	authz          types.SecurityAuthz
 	pkg            types.PackageManager
@@ -35,8 +35,8 @@ type kernel struct {
 func New() types.Kernel {
 	return &kernel{
 		requestDrivers: make([]types.RequestDriver, 0),
-		resourceBus: iobus.New(&iobus.Config{
-			Logger: &iobus.StderrLogger{
+		resourceBus: bus.New(&bus.Config{
+			Logger: &bus.StderrLogger{
 				Prefix: "[KERNEL-BUS]",
 				Writer: os.Stderr,
 			},

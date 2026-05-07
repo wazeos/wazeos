@@ -1,4 +1,4 @@
-package iobus
+package bus
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/wazeos/wazeos/internal/types"
 )
 
-// MemoryIOBus implements kernel.iobus interface using in-memory state
+// MemoryIOBus implements io.bus interface using in-memory state
 // This is a stateful, native Go implementation for routing resource calls
 type MemoryIOBus struct {
 	drivers      map[string]types.ResourceDriver // scheme -> driver
@@ -30,7 +30,7 @@ func NewMemoryIOBus(secretsStore types.ResourceDriver) *MemoryIOBus {
 func (b *MemoryIOBus) Call(ctx context.Context, call *types.ResourceCall) (*types.ResourceResult, error) {
 	// Audit log: incoming request
 	fmt.Fprintf(os.Stderr,"\n[IOBUS] ════════════════════════════════════════════════════════\n")
-	fmt.Fprintf(os.Stderr,"[IOBUS] kernel.iobus.memory\n")
+	fmt.Fprintf(os.Stderr,"[IOBUS] io.bus.memory\n")
 	fmt.Fprintf(os.Stderr,"[IOBUS] Incoming Request\n")
 	fmt.Fprintf(os.Stderr,"[IOBUS]   URI: %s\n", call.URI)
 	fmt.Fprintf(os.Stderr,"[IOBUS]   Permissions: %v\n", call.Permissions)

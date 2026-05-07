@@ -629,7 +629,7 @@ func (api *ManagementAPI) handleToolCall(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	// Create fn:// ResourceCall to route through kernel.iobus
+	// Create fn:// ResourceCall to route through io.bus
 	call := &types.ResourceCall{
 		URI:         fmt.Sprintf("fn://%s", toolName),
 		Permissions: []string{"invoke"},
@@ -639,7 +639,7 @@ func (api *ManagementAPI) handleToolCall(w http.ResponseWriter, r *http.Request,
 
 	fmt.Printf("[MCP] Routing to: %s\n", call.URI)
 
-	// Execute through resource bus (flows through authz → kernel.iobus → kernel.runtime.exec)
+	// Execute through resource bus (flows through authz → io.bus → kernel.runtime.exec)
 	result, err := api.resourceBus.Call(r.Context(), call)
 	if err != nil {
 		api.sendMCPError(w, req.ID, -32603, "Internal Error", fmt.Sprintf("Tool execution failed: %v", err))

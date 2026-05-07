@@ -1,4 +1,4 @@
-package iobus
+package bus
 
 import (
 	"context"

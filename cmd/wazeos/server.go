@@ -15,9 +15,9 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/wazeos/wazeos/internal/api"
-	"github.com/wazeos/wazeos/internal/drivers/kernel/iobus"
-	"github.com/wazeos/wazeos/internal/drivers/kernel/pkg"
+	"github.com/wazeos/wazeos/internal/drivers/io/bus"
 	"github.com/wazeos/wazeos/internal/drivers/io/request"
+	"github.com/wazeos/wazeos/internal/drivers/kernel/pkg"
 	"github.com/wazeos/wazeos/internal/drivers/kernel/runtime"
 	"github.com/wazeos/wazeos/internal/security"
 	"github.com/wazeos/wazeos/internal/types"
@@ -90,8 +90,8 @@ func runServer(cmd *cobra.Command, args []string) {
 	// Create secrets store driver
 	secretsStore := NewInMemorySecretsStore()
 
-	// Create kernel.iobus.memory - stateful native Go I/O routing layer
-	resourceBus := iobus.NewMemoryIOBus(secretsStore)
+	// Create io.bus.memory - stateful native Go I/O routing layer
+	resourceBus := bus.NewMemoryIOBus(secretsStore)
 
 	// Create package manager (needed for ExecDriver)
 	pkgMgr, err := pkg.NewPackageManager(packagesPath, nil)

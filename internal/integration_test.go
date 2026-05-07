@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/wazeos/wazeos/internal/drivers/io/bus"
 	"github.com/wazeos/wazeos/internal/drivers/io/request"
-	"github.com/wazeos/wazeos/internal/drivers/kernel/iobus"
 	"github.com/wazeos/wazeos/internal/drivers/kernel/runtime"
 	"github.com/wazeos/wazeos/internal/drivers/kernel/security"
 	"github.com/wazeos/wazeos/internal/kernel"
@@ -89,7 +89,7 @@ func TestEndToEnd_WASMDriver_FileRead(t *testing.T) {
 	// 4. Create resource bus accessor for host functions
 	// We need to manually wire up the resource bus to runtime for testing
 	// In production, kernel.Start() does this
-	resourceBus := iobus.NewMemoryIOBus(nil)
+	resourceBus := bus.NewMemoryIOBus(nil)
 	if err := resourceBus.RegisterDriver(fileDriver); err != nil {
 		t.Fatalf("Failed to register driver with resource bus: %v", err)
 	}

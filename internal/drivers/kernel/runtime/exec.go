@@ -14,7 +14,7 @@ import (
 )
 
 // ExecDriver handles fn:// calls - app execution requests
-// This routes MCP tool calls and inter-app calls through kernel.iobus
+// This routes MCP tool calls and inter-app calls through io.bus
 type ExecDriver struct {
 	packageMgr       types.PackageManager
 	resourceBus      types.ResourceBus
