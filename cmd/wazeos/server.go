@@ -15,11 +15,10 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/wazeos/wazeos/internal/api"
-	"github.com/wazeos/wazeos/internal/drivers/iobus"
-	"github.com/wazeos/wazeos/internal/drivers/pkg"
-	"github.com/wazeos/wazeos/internal/drivers/request"
-	"github.com/wazeos/wazeos/internal/drivers/runtime"
-	"github.com/wazeos/wazeos/internal/drivers/s3"
+	"github.com/wazeos/wazeos/internal/drivers/kernel/iobus"
+	"github.com/wazeos/wazeos/internal/drivers/kernel/pkg"
+	"github.com/wazeos/wazeos/internal/drivers/io/request"
+	"github.com/wazeos/wazeos/internal/drivers/kernel/runtime"
 	"github.com/wazeos/wazeos/internal/security"
 	"github.com/wazeos/wazeos/internal/types"
 )
@@ -94,13 +93,6 @@ func runServer(cmd *cobra.Command, args []string) {
 	// Create kernel.iobus.memory - stateful native Go I/O routing layer
 	resourceBus := iobus.NewMemoryIOBus(secretsStore)
 
-	// Register S3 driver
-	s3Driver := s3.NewNativeS3Driver()
-	if err := resourceBus.RegisterDriver(s3Driver); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to register S3 driver: %v\n", err)
-		os.Exit(1)
-	}
-
 	// Create package manager (needed for ExecDriver)
 	pkgMgr, err := pkg.NewPackageManager(packagesPath, nil)
 	if err != nil {
@@ -136,7 +128,6 @@ func runServer(cmd *cobra.Command, args []string) {
 
 	// Wrap with authz injection layer
 	authzLayer := security.NewAuthzInjectionLayer(resourceBus)
-	authzLayer.RegisterScheme("s3", "io.resource.s3")
 	authzLayer.RegisterScheme("secret", "kernel.security.secrets")
 	authzLayer.RegisterScheme("fn", "kernel.runtime.exec")
 

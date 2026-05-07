@@ -10,7 +10,7 @@ import (
 	"github.com/gofrs/flock"
 
 	"github.com/wazeos/wazeos/internal/cli/secrets"
-	"github.com/wazeos/wazeos/internal/drivers/pkg"
+	"github.com/wazeos/wazeos/internal/drivers/kernel/pkg"
 	"github.com/wazeos/wazeos/internal/types"
 )
 
