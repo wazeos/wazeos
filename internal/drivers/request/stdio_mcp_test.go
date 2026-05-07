@@ -150,7 +150,7 @@ func TestStdioMCPDriver_ToolsList_Success(t *testing.T) {
 
 	tool, ok := tools[0].(map[string]interface{})
 	require.True(t, ok)
-	assert.Equal(t, "test-app", tool["name"])
+	assert.Equal(t, "test/test-app:1.0.0", tool["name"])
 }
 
 func TestStdioMCPDriver_InvalidJSON(t *testing.T) {

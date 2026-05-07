@@ -8,6 +8,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// permissionsEqual checks if two permission slices contain the same elements (order-independent)
+func permissionsEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	counts := make(map[string]int)
+	for _, perm := range a {
+		counts[perm]++
+	}
+	for _, perm := range b {
+		counts[perm]--
+		if counts[perm] < 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func TestAccessBits_String(t *testing.T) {
 	tests := []struct {
 		name string
@@ -213,48 +231,48 @@ func TestPermissionContext_Intersect(t *testing.T) {
 		want  *PermissionContext
 	}{
 		{
-			name: "same patterns, intersect access bits",
+			name: "same patterns, intersect permissions",
 			pc1: NewPermissionContext([]PermissionEntry{
-				{URIPattern: "file:///data/*", Access: AccessRead | AccessWrite},
+				{URIPattern: "file:///data/*", Permissions: []string{"read", "write"}},
 			}),
 			pc2: NewPermissionContext([]PermissionEntry{
-				{URIPattern: "file:///data/*", Access: AccessRead},
+				{URIPattern: "file:///data/*", Permissions: []string{"read"}},
 			}),
 			want: NewPermissionContext([]PermissionEntry{
-				{URIPattern: "file:///data/*", Access: AccessRead},
+				{URIPattern: "file:///data/*", Permissions: []string{"read"}},
 			}),
 		},
 		{
 			name: "different patterns, no intersection",
 			pc1: NewPermissionContext([]PermissionEntry{
-				{URIPattern: "file:///data/*", Access: AccessRead | AccessWrite},
+				{URIPattern: "file:///data/*", Permissions: []string{"read", "write"}},
 			}),
 			pc2: NewPermissionContext([]PermissionEntry{
-				{URIPattern: "file:///other/*", Access: AccessRead},
+				{URIPattern: "file:///other/*", Permissions: []string{"read"}},
 			}),
 			want: NewPermissionContext([]PermissionEntry{}),
 		},
 		{
 			name: "multiple patterns, partial intersection",
 			pc1: NewPermissionContext([]PermissionEntry{
-				{URIPattern: "file:///data/*", Access: AccessRead | AccessWrite},
-				{URIPattern: "http://api.example.com/*", Access: AccessRead},
+				{URIPattern: "file:///data/*", Permissions: []string{"read", "write"}},
+				{URIPattern: "http://api.example.com/*", Permissions: []string{"read"}},
 			}),
 			pc2: NewPermissionContext([]PermissionEntry{
-				{URIPattern: "file:///data/*", Access: AccessRead},
-				{URIPattern: "fn://my-app/*", Access: AccessExecute},
+				{URIPattern: "file:///data/*", Permissions: []string{"read"}},
+				{URIPattern: "fn://my-app/*", Permissions: []string{"execute"}},
 			}),
 			want: NewPermissionContext([]PermissionEntry{
-				{URIPattern: "file:///data/*", Access: AccessRead},
+				{URIPattern: "file:///data/*", Permissions: []string{"read"}},
 			}),
 		},
 		{
-			name: "no common access bits, filtered out",
+			name: "no common permissions, filtered out",
 			pc1: NewPermissionContext([]PermissionEntry{
-				{URIPattern: "file:///data/*", Access: AccessRead},
+				{URIPattern: "file:///data/*", Permissions: []string{"read"}},
 			}),
 			pc2: NewPermissionContext([]PermissionEntry{
-				{URIPattern: "file:///data/*", Access: AccessWrite},
+				{URIPattern: "file:///data/*", Permissions: []string{"write"}},
 			}),
 			want: NewPermissionContext([]PermissionEntry{}),
 		},
@@ -267,7 +285,7 @@ func TestPermissionContext_Intersect(t *testing.T) {
 		{
 			name: "one empty context",
 			pc1: NewPermissionContext([]PermissionEntry{
-				{URIPattern: "file:///data/*", Access: AccessRead | AccessWrite},
+				{URIPattern: "file:///data/*", Permissions: []string{"read", "write"}},
 			}),
 			pc2:  NewPermissionContext([]PermissionEntry{}),
 			want: NewPermissionContext([]PermissionEntry{}),
@@ -283,7 +301,9 @@ func TestPermissionContext_Intersect(t *testing.T) {
 			for _, wantEntry := range tt.want.Entries {
 				found := false
 				for _, gotEntry := range got.Entries {
-					if gotEntry.URIPattern == wantEntry.URIPattern && gotEntry.Access == wantEntry.Access {
+					if gotEntry.URIPattern == wantEntry.URIPattern &&
+					   len(gotEntry.Permissions) == len(wantEntry.Permissions) &&
+					   permissionsEqual(gotEntry.Permissions, wantEntry.Permissions) {
 						found = true
 						break
 					}
@@ -296,7 +316,7 @@ func TestPermissionContext_Intersect(t *testing.T) {
 
 func TestNewExecutionContext(t *testing.T) {
 	permissions := NewPermissionContext([]PermissionEntry{
-		{URIPattern: "file:///data/*", Access: AccessRead},
+		{URIPattern: "file:///data/*", Permissions: []string{"read"}},
 	})
 
 	ctx := NewExecutionContext("req-123", "trace-456", "user:alice", permissions)
@@ -312,13 +332,13 @@ func TestNewExecutionContext(t *testing.T) {
 
 func TestExecutionContext_ChildContext(t *testing.T) {
 	parentPermissions := NewPermissionContext([]PermissionEntry{
-		{URIPattern: "file:///data/*", Access: AccessRead | AccessWrite},
-		{URIPattern: "fn://my-app/*", Access: AccessExecute},
+		{URIPattern: "file:///data/*", Permissions: []string{"read", "write"}},
+		{URIPattern: "fn://my-app/*", Permissions: []string{"execute"}},
 	})
 
 	childPermissions := NewPermissionContext([]PermissionEntry{
-		{URIPattern: "file:///data/*", Access: AccessRead},
-		{URIPattern: "http://api.example.com/*", Access: AccessRead},
+		{URIPattern: "file:///data/*", Permissions: []string{"read"}},
+		{URIPattern: "http://api.example.com/*", Permissions: []string{"read"}},
 	})
 
 	parent := NewExecutionContext("req-123", "trace-456", "user:alice", parentPermissions)
@@ -338,7 +358,7 @@ func TestExecutionContext_ChildContext(t *testing.T) {
 	// Check permission intersection
 	assert.Equal(t, 1, len(child.PermissionContext.Entries))
 	assert.Equal(t, "file:///data/*", child.PermissionContext.Entries[0].URIPattern)
-	assert.Equal(t, AccessRead, child.PermissionContext.Entries[0].Access)
+	assert.Equal(t, []string{"read"}, child.PermissionContext.Entries[0].Permissions)
 
 	// Timestamp should be after parent
 	assert.True(t, child.Timestamp.After(parent.Timestamp))
@@ -357,7 +377,7 @@ func TestAppMetadata_AppID(t *testing.T) {
 				Version: "1.0.0",
 				Author:  "alice",
 			},
-			want: "alice/my-app_1.0.0",
+			want: "alice/my-app:1.0.0",
 		},
 		{
 			name: "complex names",
@@ -366,7 +386,7 @@ func TestAppMetadata_AppID(t *testing.T) {
 				Version: "2.3.4",
 				Author:  "bob-smith",
 			},
-			want: "bob-smith/data-processor_2.3.4",
+			want: "bob-smith/data-processor:2.3.4",
 		},
 	}
 
@@ -401,17 +421,15 @@ func TestResourceCall_Structure(t *testing.T) {
 	ctx := NewExecutionContext("req-123", "trace-456", "user:alice", NewPermissionContext(nil))
 
 	call := &ResourceCall{
-		Context:    ctx,
-		URI:        "file:///data/test.txt",
-		Method:     "READ",
-		Headers:    map[string]string{"Content-Type": "text/plain"},
-		Body:       []byte("test data"),
-		AccessMode: AccessRead,
+		Context:     ctx,
+		URI:         "file:///data/test.txt",
+		Headers:     map[string]string{"Content-Type": "text/plain"},
+		Body:        []byte("test data"),
+		Permissions: []string{"read"},
 	}
 
 	assert.Equal(t, "file:///data/test.txt", call.URI)
-	assert.Equal(t, "READ", call.Method)
-	assert.Equal(t, AccessRead, call.AccessMode)
+	assert.Equal(t, []string{"read"}, call.Permissions)
 	assert.Equal(t, "text/plain", call.Headers["Content-Type"])
 	assert.Equal(t, "test data", string(call.Body))
 }

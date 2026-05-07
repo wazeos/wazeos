@@ -285,10 +285,10 @@ func (rb *ResourceBus) emitResourceCallAudit(call *types.ResourceCall, result *t
 			Type:      types.AuditEventResourceCall,
 			Success:   result != nil && result.Error == nil,
 		},
-		URI:        call.URI,
-		Method:     call.Method,
-		Driver:     driverName,
-		Duration:   duration,
+		URI:         call.URI,
+		Permissions: call.Permissions,
+		Driver:      driverName,
+		Duration:    duration,
 	}
 
 	if call.Context != nil {

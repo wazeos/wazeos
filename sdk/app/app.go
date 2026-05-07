@@ -163,7 +163,7 @@ func RunConsumer(topic string, handler MessageHandler, opts *ConsumeOptions) {
 	}
 
 	// Use unified I/O API to consume messages
-	result, err := ctx.IO(fmt.Sprintf("queue://%s", topic), []string{"consume"}).Call(map[string]interface{}{
+	result, err := ctx.IO(fmt.Sprintf("queue://%s", topic), "consume").Call(map[string]interface{}{
 		"maxCount": opts.MaxCount,
 		"timeout":  opts.Timeout,
 		"group":    opts.Group,

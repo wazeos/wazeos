@@ -136,8 +136,8 @@ func TestEndToEnd_WASMDriver_FileRead(t *testing.T) {
 	principal := "user:test"
 	permissions := types.NewPermissionContext([]types.PermissionEntry{
 		{
-			URIPattern: "file://*/*",
-			Access:     types.AccessRead | types.AccessWrite,
+			URIPattern:  "file://*/*",
+			Permissions: []string{"read", "write"},
 		},
 	})
 

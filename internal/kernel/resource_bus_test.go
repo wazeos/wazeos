@@ -52,15 +52,16 @@ func TestResourceBus_RegisterDriver_NoPatterns(t *testing.T) {
 func TestResourceBus_RegisterDriver_Duplicate(t *testing.T) {
 	bus := NewResourceBus()
 
+	// Multiple drivers with the same name are allowed - routing is by URI pattern
 	driver1 := &mockResourceDriver{name: "test", patterns: []string{"file:///*"}}
 	driver2 := &mockResourceDriver{name: "test", patterns: []string{"http://*/*"}}
 
 	err := bus.RegisterDriver(driver1)
 	assert.NoError(t, err)
 
+	// Should succeed - different patterns are allowed with same name
 	err = bus.RegisterDriver(driver2)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "already registered")
+	assert.NoError(t, err)
 }
 
 func TestResourceBus_RegisterDriver_InvalidPattern(t *testing.T) {
@@ -90,12 +91,11 @@ func TestResourceBus_Call(t *testing.T) {
 	execCtx := types.NewExecutionContext("req-1", "trace-1", "user:test", types.NewPermissionContext(nil))
 
 	call := &types.ResourceCall{
-		Context:    execCtx,
-		URI:        "file:///data/test.txt",
-		Method:     "READ",
-		Headers:    make(map[string]string),
-		Body:       nil,
-		AccessMode: types.AccessRead,
+		Context:     execCtx,
+		URI:         "file:///data/test.txt",
+		Headers:     make(map[string]string),
+		Body:        nil,
+		Permissions: []string{"read"},
 	}
 
 	result, err := bus.Call(ctx, call)
@@ -129,12 +129,11 @@ func TestResourceBus_Call_NoMatchingDriver(t *testing.T) {
 	execCtx := types.NewExecutionContext("req-1", "trace-1", "user:test", types.NewPermissionContext(nil))
 
 	call := &types.ResourceCall{
-		Context:    execCtx,
-		URI:        "http://example.com/test",
-		Method:     "GET",
-		Headers:    make(map[string]string),
-		Body:       nil,
-		AccessMode: types.AccessRead,
+		Context:     execCtx,
+		URI:         "http://example.com/test",
+		Headers:     make(map[string]string),
+		Body:        nil,
+		Permissions: []string{"read"},
 	}
 
 	result, err := bus.Call(ctx, call)

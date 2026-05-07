@@ -29,7 +29,7 @@ func NewAuthzInjectionLayer(bus types.ResourceBus) *AuthzInjectionLayer {
 
 // Call intercepts resource calls and injects credentials
 func (a *AuthzInjectionLayer) Call(ctx context.Context, call *types.ResourceCall) (*types.ResourceResult, error) {
-	fmt.Printf("[AUTHZ] Intercepted call: %s %s\n", call.Method, call.URI)
+	fmt.Printf("[AUTHZ] Intercepted call: %s (permissions: %v)\n", call.URI, call.Permissions)
 
 	// Parse URI to determine driver
 	parsed, err := url.Parse(call.URI)
@@ -100,8 +100,8 @@ func (a *AuthzInjectionLayer) queryCredentials(ctx context.Context, driverID, ta
 
 	// Call secrets driver
 	matchCall := &types.ResourceCall{
-		URI:    matchURI,
-		Method: "MATCH",
+		URI:         matchURI,
+		Permissions: []string{"match"},
 	}
 
 	result, err := a.bus.Call(ctx, matchCall)

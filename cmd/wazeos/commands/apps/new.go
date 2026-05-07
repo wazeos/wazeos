@@ -367,7 +367,7 @@ func (t *Tool) Handle(ctx *app.Context, inputRaw map[string]interface{}) (map[st
     json.Unmarshal(data, &input)
 
     // Use typed fields with auto-completion!
-    greeting := fmt.Sprintf("Hello, %s!", input.Message)
+    greeting := fmt.Sprintf("Hello, %%s!", input.Message)
 
     // Return JSON response
     return map[string]interface{}{

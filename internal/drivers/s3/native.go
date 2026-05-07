@@ -99,22 +99,41 @@ func (d *NativeS3Driver) HandleCall(ctx context.Context, call *types.ResourceCal
 	// Create S3 client
 	client := s3.NewFromConfig(cfg)
 
-	// Handle method
-	switch call.Method {
-	case "WRITE", "PUT":
-		return d.handleWrite(client, bucket, key, call.Body)
-	case "READ", "GET":
-		return d.handleRead(client, bucket, key)
-	case "DELETE":
-		return d.handleDelete(client, bucket, key)
-	case "LIST":
-		return d.handleList(client, bucket, key)
-	default:
-		return &types.ResourceResult{
-			StatusCode: 405,
-			Body:       []byte(`{"error":"method not allowed"}`),
-		}, nil
+	// Determine operation from permissions
+	// Check permissions to determine which operation to perform
+	hasWrite := false
+	hasRead := false
+	hasDelete := false
+	hasList := false
+
+	for _, perm := range call.Permissions {
+		switch strings.ToLower(perm) {
+		case "write", "put":
+			hasWrite = true
+		case "read", "get":
+			hasRead = true
+		case "delete":
+			hasDelete = true
+		case "list":
+			hasList = true
+		}
 	}
+
+	// Priority order: write > delete > list > read (most specific to least specific)
+	if hasWrite {
+		return d.handleWrite(client, bucket, key, call.Body)
+	} else if hasDelete {
+		return d.handleDelete(client, bucket, key)
+	} else if hasList {
+		return d.handleList(client, bucket, key)
+	} else if hasRead {
+		return d.handleRead(client, bucket, key)
+	}
+
+	return &types.ResourceResult{
+		StatusCode: 403,
+		Body:       []byte(`{"error":"no valid operation permission provided"}`),
+	}, nil
 }
 
 // parseBucketFQDN extracts bucket name and region from FQDN

@@ -32,8 +32,8 @@ func (b *MemoryIOBus) Call(ctx context.Context, call *types.ResourceCall) (*type
 	fmt.Fprintf(os.Stderr,"\n[IOBUS] ════════════════════════════════════════════════════════\n")
 	fmt.Fprintf(os.Stderr,"[IOBUS] kernel.iobus.memory\n")
 	fmt.Fprintf(os.Stderr,"[IOBUS] Incoming Request\n")
-	fmt.Fprintf(os.Stderr,"[IOBUS]   Method: %s\n", call.Method)
 	fmt.Fprintf(os.Stderr,"[IOBUS]   URI: %s\n", call.URI)
+	fmt.Fprintf(os.Stderr,"[IOBUS]   Permissions: %v\n", call.Permissions)
 
 	if len(call.Headers) > 0 {
 		fmt.Fprintf(os.Stderr,"[IOBUS]   Headers:\n")

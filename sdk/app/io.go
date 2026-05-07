@@ -2,7 +2,6 @@ package app
 
 import (
 	"encoding/json"
-	"strings"
 
 	"github.com/wazeos/wazeos/sdk/driver"
 )
@@ -41,24 +40,32 @@ type IOOperation struct {
 // Call executes the I/O operation with the given arguments.
 // Args are driver-specific and passed as a map for flexibility.
 //
+// The method/operation should be specified in the args map when needed by the driver.
+// For example, HTTP drivers may expect a "method" field, while file drivers infer
+// operations from the permissions and args provided.
+//
 // Example usage:
 //
-//	// File read
-//	result, err := ctx.IO("file:///tmp/config.txt", []string{"read"}).Call(nil)
+//	// File read - uses all available permissions
+//	result, err := ctx.IO("file:///tmp/config.txt").Call(map[string]interface{}{
+//	    "operation": "read",
+//	})
 //
-//	// File write
-//	err := ctx.IO("file:///tmp/config.txt", []string{"write"}).Call(map[string]interface{}{
+//	// File write - explicitly limited to write permission
+//	err := ctx.IO("file:///tmp/config.txt", "write").Call(map[string]interface{}{
+//	    "operation": "write",
 //	    "data": []byte("content"),
 //	})
 //
-//	// HTTP request
-//	result, err := ctx.IO("https://api.example.com/data", []string{"POST"}).Call(map[string]interface{}{
+//	// HTTP request - method specified in args
+//	result, err := ctx.IO("https://api.example.com/data").Call(map[string]interface{}{
+//	    "method": "POST",
 //	    "body": []byte("data"),
 //	    "headers": map[string]string{"Content-Type": "application/json"},
 //	})
 //
 //	// App call
-//	result, err := ctx.IO("fn://wazeos/logger", []string{"invoke"}).Call(map[string]interface{}{
+//	result, err := ctx.IO("fn://wazeos/logger", "invoke").Call(map[string]interface{}{
 //	    "level": "info",
 //	    "message": "test",
 //	})
@@ -91,16 +98,9 @@ func (op *IOOperation) Call(args map[string]interface{}) (map[string]interface{}
 		headers = make(map[string]string)
 	}
 
-	// Determine method from permissions (first permission is typically the method)
-	method := "CALL"
-	if len(op.permissions) > 0 {
-		method = strings.ToUpper(op.permissions[0])
-	}
-
 	// Make the driver call with permission strings
 	result, err := driver.CallResourceCall(&driver.ResourceCall{
 		URI:         op.uri,
-		Method:      method,
 		Headers:     headers,
 		Body:        body,
 		Permissions: op.permissions,

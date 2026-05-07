@@ -64,7 +64,7 @@ func (m *mockAuthz) GetPermissions(ctx context.Context, principal string) (*type
 		return m.getPermissionsFn(ctx, principal)
 	}
 	return types.NewPermissionContext([]types.PermissionEntry{
-		{URIPattern: "*", Access: types.AccessRead | types.AccessWrite | types.AccessExecute},
+		{URIPattern: "*", Permissions: []string{"read", "write", "execute"}},
 	}), nil
 }
 
@@ -72,7 +72,7 @@ func (m *mockAuthz) SetPermissions(ctx context.Context, principal string, permis
 	return nil
 }
 
-func (m *mockAuthz) CheckAccess(uri string, mode types.AccessBits, permissions *types.PermissionContext) error {
+func (m *mockAuthz) CheckAccess(uri string, requiredPermissions []string, permissions *types.PermissionContext) error {
 	return nil
 }
 

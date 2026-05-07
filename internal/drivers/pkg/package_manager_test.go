@@ -128,9 +128,12 @@ func TestNewPackageManager_DefaultPath(t *testing.T) {
 	pm, err := NewPackageManager("", runtime)
 	assert.NoError(t, err)
 	assert.NotNil(t, pm)
-	assert.Equal(t, "./data", pm.dataPath)
-	assert.Equal(t, filepath.Join("./data", "apps"), pm.appsPath)
-	assert.Equal(t, filepath.Join("./data", "drivers"), pm.driversPath)
+	// When empty string is passed, it uses $HOME/.wazeos/data
+	home, _ := os.UserHomeDir()
+	expectedPath := filepath.Join(home, ".wazeos", "data")
+	assert.Equal(t, expectedPath, pm.dataPath)
+	assert.Equal(t, filepath.Join(expectedPath, "apps"), pm.appsPath)
+	assert.Equal(t, filepath.Join(expectedPath, "drivers"), pm.driversPath)
 
 	// Clean up
 	os.RemoveAll("./data")
@@ -524,7 +527,7 @@ func TestPackageManager_Uninstall_HasDependents(t *testing.T) {
 	// Try to uninstall base app (should fail)
 	err = pm.Uninstall(ctx, base.AppID())
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "depends on")
+	assert.Contains(t, err.Error(), "depend on")
 }
 
 func TestPackageManager_List(t *testing.T) {
@@ -655,8 +658,8 @@ func TestPackageManager_Resolve_ByName(t *testing.T) {
 	installed, err := pm.Install(ctx, zipData)
 	require.NoError(t, err)
 
-	// Resolve by name
-	resolved, err := pm.Resolve(ctx, "test-app")
+	// Resolve by author/name
+	resolved, err := pm.Resolve(ctx, "author/test-app")
 	assert.NoError(t, err)
 	assert.Equal(t, installed.AppID(), resolved)
 }
@@ -669,7 +672,7 @@ func TestPackageManager_Resolve_NotFound(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	resolved, err := pm.Resolve(ctx, "nonexistent-app")
+	resolved, err := pm.Resolve(ctx, "author/nonexistent-app")
 	assert.Error(t, err)
 	assert.Empty(t, resolved)
 	assert.True(t, types.IsNotFound(err))

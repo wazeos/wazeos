@@ -412,8 +412,8 @@ func (api *ManagementAPI) listSecrets(w http.ResponseWriter, r *http.Request) {
 
 	// Call secrets driver LIST method
 	call := &types.ResourceCall{
-		URI:    "secret:///",
-		Method: "LIST",
+		URI:         "secret:///",
+		Permissions: []string{"list"},
 	}
 
 	result, err := api.resourceBus.Call(r.Context(), call)
@@ -480,9 +480,9 @@ func (api *ManagementAPI) createSecret(w http.ResponseWriter, r *http.Request) {
 
 	// Call secrets driver WRITE method
 	call := &types.ResourceCall{
-		URI:    fmt.Sprintf("secret:///%s", req.Key),
-		Method: "WRITE",
-		Body:   bodyJSON,
+		URI:         fmt.Sprintf("secret:///%s", req.Key),
+		Permissions: []string{"write"},
+		Body:        bodyJSON,
 	}
 
 	result, err := api.resourceBus.Call(r.Context(), call)
@@ -515,8 +515,8 @@ func (api *ManagementAPI) deleteSecret(w http.ResponseWriter, r *http.Request, k
 
 	// Call secrets driver DELETE method
 	call := &types.ResourceCall{
-		URI:    fmt.Sprintf("secret:///%s", key),
-		Method: "DELETE",
+		URI:         fmt.Sprintf("secret:///%s", key),
+		Permissions: []string{"delete"},
 	}
 
 	result, err := api.resourceBus.Call(r.Context(), call)
@@ -631,10 +631,10 @@ func (api *ManagementAPI) handleToolCall(w http.ResponseWriter, r *http.Request,
 
 	// Create fn:// ResourceCall to route through kernel.iobus
 	call := &types.ResourceCall{
-		URI:    fmt.Sprintf("fn://%s", toolName),
-		Method: "CALL",
-		Body:   argsJSON,
-		Headers: make(map[string]string),
+		URI:         fmt.Sprintf("fn://%s", toolName),
+		Permissions: []string{"invoke"},
+		Body:        argsJSON,
+		Headers:     make(map[string]string),
 	}
 
 	fmt.Printf("[MCP] Routing to: %s\n", call.URI)

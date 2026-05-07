@@ -21,39 +21,60 @@ type Context struct {
 	Log *Logger // Structured logger
 }
 
-// IO creates a new I/O operation for the given URI with required permissions.
+// IO creates a new I/O operation for the given URI with optional permissions.
 // This is the unified API for all I/O operations (files, HTTP, apps, queues, etc.).
+//
+// Permissions are optional - when not specified, all available permissions from the
+// context are used (result of intersections across the request chain). Use explicit
+// permissions to manually reduce the permission set for this specific call.
 //
 // Example usage:
 //
-//	// File operations
-//	data, err := ctx.IO("file:///tmp/config.txt", []string{"read"}).Call(nil)
-//	err := ctx.IO("file:///tmp/config.txt", []string{"write"}).Call(map[string]interface{}{
+//	// File operations - use all available permissions for this URI
+//	data, err := ctx.IO("file:///tmp/config.txt").Call(nil)
+//
+//	// File operations - explicitly limit to only read permission
+//	data, err := ctx.IO("file:///tmp/config.txt", "read").Call(nil)
+//
+//	// File write with multiple permissions
+//	err := ctx.IO("file:///tmp/config.txt", "write", "delete").Call(map[string]interface{}{
 //	    "data": []byte("content"),
 //	})
 //
-//	// HTTP requests
-//	result, err := ctx.IO("https://api.example.com/data", []string{"GET"}).Call(nil)
-//	result, err := ctx.IO("https://api.example.com/data", []string{"POST"}).Call(map[string]interface{}{
+//	// HTTP requests - use all available HTTP permissions
+//	result, err := ctx.IO("https://api.example.com/data").Call(map[string]interface{}{
+//	    "method": "POST",
 //	    "body": []byte("data"),
 //	    "headers": map[string]string{"Content-Type": "application/json"},
 //	})
 //
 //	// App-to-app calls
-//	result, err := ctx.IO("fn://wazeos/logger", []string{"invoke"}).Call(map[string]interface{}{
+//	result, err := ctx.IO("fn://wazeos/logger", "invoke").Call(map[string]interface{}{
 //	    "level": "info",
 //	    "message": "test",
 //	})
 //
 //	// Queue operations
-//	err := ctx.IO("queue://events", []string{"write"}).Call(map[string]interface{}{
+//	err := ctx.IO("queue://events", "produce").Call(map[string]interface{}{
 //	    "message": []byte("event data"),
 //	})
-func (c *Context) IO(uri string, permissions []string) *IOOperation {
+func (c *Context) IO(uri string, permissions ...string) *IOOperation {
+	// If no permissions specified, use all available permissions for this URI
+	perms := permissions
+	if len(permissions) == 0 && c.Permissions != nil {
+		// Find all permissions available for this URI from context
+		for _, entry := range c.Permissions.Entries {
+			if matchesPattern(entry.URIPattern, uri) {
+				perms = entry.Permissions
+				break
+			}
+		}
+	}
+
 	return &IOOperation{
 		ctx:         c,
 		uri:         uri,
-		permissions: permissions,
+		permissions: perms,
 	}
 }
 

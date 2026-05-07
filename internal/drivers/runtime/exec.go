@@ -70,7 +70,7 @@ func (d *ExecDriver) Patterns() []string {
 func (d *ExecDriver) HandleCall(ctx context.Context, call *types.ResourceCall) (*types.ResourceResult, error) {
 	fmt.Printf("[EXEC] Processing execution request\n")
 	fmt.Printf("[EXEC]   URI: %s\n", call.URI)
-	fmt.Printf("[EXEC]   Method: %s\n", call.Method)
+	fmt.Printf("[EXEC]   Permissions: %v\n", call.Permissions)
 
 	// Parse fn://app-id where app-id can be:
 	// - Full ID: author/name:version (e.g., "deniscoady/test:1.0.0")
@@ -308,7 +308,7 @@ func (d *ExecDriver) hostResourceCall(ctx context.Context, mod api.Module, param
 		return 0
 	}
 
-	fmt.Printf("[EXEC]   Host function call: %s %s\n", call.Method, call.URI)
+	fmt.Printf("[EXEC]   Host function call: %s (permissions: %v)\n", call.URI, call.Permissions)
 
 	// Execute call through resource bus (with authz layer)
 	result, err := d.resourceBus.Call(ctx, &call)

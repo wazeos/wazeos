@@ -84,7 +84,7 @@ func TestNewFnDriver_DefaultMaxDepth(t *testing.T) {
 
 func TestFnDriver_Name(t *testing.T) {
 	driver := NewFnDriver(&mockPackageManager{}, 0)
-	assert.Equal(t, "io.resource.fn", driver.Name())
+	assert.Equal(t, "io.resource", driver.Name())
 }
 
 func TestFnDriver_Patterns(t *testing.T) {
@@ -116,10 +116,9 @@ func TestFnDriver_HandleCall_Success(t *testing.T) {
 	call := &types.ResourceCall{
 		Context:    execCtx,
 		URI:        "fn://my-app/arg1/arg2",
-		Method:     "EXECUTE",
-		Headers:    make(map[string]string),
-		Body:       nil,
-		AccessMode: types.AccessExecute,
+		Headers:     make(map[string]string),
+		Body:        nil,
+		Permissions: []string{"execute"},
 	}
 
 	result, err := driver.HandleCall(ctx, call)
@@ -152,10 +151,9 @@ func TestFnDriver_HandleCall_WithStderr(t *testing.T) {
 	call := &types.ResourceCall{
 		Context:    execCtx,
 		URI:        "fn://my-app",
-		Method:     "EXECUTE",
-		Headers:    make(map[string]string),
-		Body:       nil,
-		AccessMode: types.AccessExecute,
+		Headers:     make(map[string]string),
+		Body:        nil,
+		Permissions: []string{"execute"},
 	}
 
 	result, err := driver.HandleCall(ctx, call)
@@ -190,10 +188,9 @@ func TestFnDriver_HandleCall_NonZeroExitCode(t *testing.T) {
 	call := &types.ResourceCall{
 		Context:    execCtx,
 		URI:        "fn://my-app",
-		Method:     "EXECUTE",
-		Headers:    make(map[string]string),
-		Body:       nil,
-		AccessMode: types.AccessExecute,
+		Headers:     make(map[string]string),
+		Body:        nil,
+		Permissions: []string{"execute"},
 	}
 
 	result, err := driver.HandleCall(ctx, call)
@@ -218,10 +215,9 @@ func TestFnDriver_HandleCall_AppNotFound(t *testing.T) {
 	call := &types.ResourceCall{
 		Context:    execCtx,
 		URI:        "fn://nonexistent-app",
-		Method:     "EXECUTE",
-		Headers:    make(map[string]string),
-		Body:       nil,
-		AccessMode: types.AccessExecute,
+		Headers:     make(map[string]string),
+		Body:        nil,
+		Permissions: []string{"execute"},
 	}
 
 	result, err := driver.HandleCall(ctx, call)
@@ -245,10 +241,9 @@ func TestFnDriver_HandleCall_MaxDepthExceeded(t *testing.T) {
 	call := &types.ResourceCall{
 		Context:    execCtx,
 		URI:        "fn://my-app",
-		Method:     "EXECUTE",
-		Headers:    make(map[string]string),
-		Body:       nil,
-		AccessMode: types.AccessExecute,
+		Headers:     make(map[string]string),
+		Body:        nil,
+		Permissions: []string{"execute"},
 	}
 
 	result, err := driver.HandleCall(ctx, call)
@@ -280,10 +275,9 @@ func TestFnDriver_HandleCall_NoInvoker(t *testing.T) {
 	call := &types.ResourceCall{
 		Context:    execCtx,
 		URI:        "fn://my-app",
-		Method:     "EXECUTE",
-		Headers:    make(map[string]string),
-		Body:       nil,
-		AccessMode: types.AccessExecute,
+		Headers:     make(map[string]string),
+		Body:        nil,
+		Permissions: []string{"execute"},
 	}
 
 	result, err := driver.HandleCall(ctx, call)
@@ -303,10 +297,9 @@ func TestFnDriver_HandleCall_InvalidURI(t *testing.T) {
 	call := &types.ResourceCall{
 		Context:    execCtx,
 		URI:        ":::invalid:::URI:::",
-		Method:     "EXECUTE",
-		Headers:    make(map[string]string),
-		Body:       nil,
-		AccessMode: types.AccessExecute,
+		Headers:     make(map[string]string),
+		Body:        nil,
+		Permissions: []string{"execute"},
 	}
 
 	result, err := driver.HandleCall(ctx, call)
@@ -325,10 +318,9 @@ func TestFnDriver_HandleCall_NoAppName(t *testing.T) {
 	call := &types.ResourceCall{
 		Context:    execCtx,
 		URI:        "fn:///arg1/arg2", // No app name
-		Method:     "EXECUTE",
-		Headers:    make(map[string]string),
-		Body:       nil,
-		AccessMode: types.AccessExecute,
+		Headers:     make(map[string]string),
+		Body:        nil,
+		Permissions: []string{"execute"},
 	}
 
 	result, err := driver.HandleCall(ctx, call)
@@ -365,10 +357,9 @@ func TestFnDriver_HandleCall_ParsesArgs(t *testing.T) {
 	call := &types.ResourceCall{
 		Context:    execCtx,
 		URI:        "fn://my-app/arg1/arg2/arg3",
-		Method:     "EXECUTE",
-		Headers:    make(map[string]string),
-		Body:       nil,
-		AccessMode: types.AccessExecute,
+		Headers:     make(map[string]string),
+		Body:        nil,
+		Permissions: []string{"execute"},
 	}
 
 	result, err := driver.HandleCall(ctx, call)
@@ -406,7 +397,7 @@ func TestFnDriver_HandleCall_PermissionIntersection(t *testing.T) {
 
 	// Create parent context with permissions
 	parentPerms := types.NewPermissionContext([]types.PermissionEntry{
-		{URIPattern: "file:///data/*", Access: types.AccessRead | types.AccessWrite},
+		{URIPattern: "file:///data/*", Permissions: []string{"read", "write"}},
 	})
 
 	execCtx := types.NewExecutionContext("req-1", "trace-1", "user:test", parentPerms)
@@ -414,10 +405,9 @@ func TestFnDriver_HandleCall_PermissionIntersection(t *testing.T) {
 	call := &types.ResourceCall{
 		Context:    execCtx,
 		URI:        "fn://my-app",
-		Method:     "EXECUTE",
-		Headers:    make(map[string]string),
-		Body:       nil,
-		AccessMode: types.AccessExecute,
+		Headers:     make(map[string]string),
+		Body:        nil,
+		Permissions: []string{"execute"},
 	}
 
 	result, err := driver.HandleCall(ctx, call)

@@ -275,8 +275,27 @@ func (s *InMemorySecretsStore) Patterns() []string {
 }
 
 func (s *InMemorySecretsStore) HandleCall(ctx context.Context, call *types.ResourceCall) (*types.ResourceResult, error) {
-	switch call.Method {
-	case "WRITE", "SET", "PUT":
+	// Determine operation from permissions
+	hasWrite := false
+	hasRead := false
+	hasDelete := false
+	hasList := false
+
+	for _, perm := range call.Permissions {
+		switch strings.ToLower(perm) {
+		case "write", "set", "put":
+			hasWrite = true
+		case "read", "get":
+			hasRead = true
+		case "delete":
+			hasDelete = true
+		case "list":
+			hasList = true
+		}
+	}
+
+	// Handle based on permissions (priority: write > delete > list > read)
+	if hasWrite {
 		var req map[string]interface{}
 		if err := json.Unmarshal(call.Body, &req); err != nil {
 			return &types.ResourceResult{StatusCode: 400, Body: []byte(`{"error":"invalid JSON"}`)}, nil
@@ -286,17 +305,17 @@ func (s *InMemorySecretsStore) HandleCall(ctx context.Context, call *types.Resou
 		resp := map[string]interface{}{"key": key, "stored": true}
 		respJSON, _ := json.Marshal(resp)
 		return &types.ResourceResult{StatusCode: 200, Body: respJSON}, nil
+	}
 
-	case "READ", "GET":
+	if hasDelete {
 		key := strings.TrimPrefix(call.URI, "secret:///")
-		if secret, ok := s.secrets[key]; ok {
-			resp := map[string]interface{}{"key": key, "value": secret["value"]}
-			respJSON, _ := json.Marshal(resp)
-			return &types.ResourceResult{StatusCode: 200, Body: respJSON}, nil
-		}
-		return &types.ResourceResult{StatusCode: 404, Body: []byte(`{"error":"not found"}`)}, nil
+		delete(s.secrets, key)
+		resp := map[string]interface{}{"key": key, "deleted": true}
+		respJSON, _ := json.Marshal(resp)
+		return &types.ResourceResult{StatusCode: 200, Body: respJSON}, nil
+	}
 
-	case "LIST":
+	if hasList {
 		keys := make([]string, 0, len(s.secrets))
 		for k := range s.secrets {
 			keys = append(keys, k)
@@ -304,32 +323,39 @@ func (s *InMemorySecretsStore) HandleCall(ctx context.Context, call *types.Resou
 		resp := map[string]interface{}{"keys": keys, "count": len(keys)}
 		respJSON, _ := json.Marshal(resp)
 		return &types.ResourceResult{StatusCode: 200, Body: respJSON}, nil
-
-	case "DELETE":
-		key := strings.TrimPrefix(call.URI, "secret:///")
-		delete(s.secrets, key)
-		resp := map[string]interface{}{"key": key, "deleted": true}
-		respJSON, _ := json.Marshal(resp)
-		return &types.ResourceResult{StatusCode: 200, Body: respJSON}, nil
-
-	case "MATCH":
-		parsed, _ := url.Parse(call.URI)
-		prefix := parsed.Query().Get("prefix")
-		matches := make([]map[string]interface{}, 0)
-		for k, v := range s.secrets {
-			if prefix == "" || strings.HasPrefix(k, prefix) {
-				matches = append(matches, map[string]interface{}{
-					"key":   k,
-					"value": v["value"],
-				})
-			}
-		}
-		resp := map[string]interface{}{"matches": matches, "count": len(matches)}
-		respJSON, _ := json.Marshal(resp)
-		return &types.ResourceResult{StatusCode: 200, Body: respJSON}, nil
 	}
 
-	return &types.ResourceResult{StatusCode: 405, Body: []byte(`{"error":"method not allowed"}`)}, nil
+	if hasRead {
+		key := strings.TrimPrefix(call.URI, "secret:///")
+		if secret, ok := s.secrets[key]; ok {
+			resp := map[string]interface{}{"key": key, "value": secret["value"]}
+			respJSON, _ := json.Marshal(resp)
+			return &types.ResourceResult{StatusCode: 200, Body: respJSON}, nil
+		}
+		return &types.ResourceResult{StatusCode: 404, Body: []byte(`{"error":"not found"}`)}, nil
+	}
+
+	// Check for match permission (special case for pattern matching)
+	for _, perm := range call.Permissions {
+		if strings.ToLower(perm) == "match" {
+			parsed, _ := url.Parse(call.URI)
+			prefix := parsed.Query().Get("prefix")
+			matches := make([]map[string]interface{}, 0)
+			for k, v := range s.secrets {
+				if prefix == "" || strings.HasPrefix(k, prefix) {
+					matches = append(matches, map[string]interface{}{
+						"key":   k,
+						"value": v["value"],
+					})
+				}
+			}
+			resp := map[string]interface{}{"matches": matches, "count": len(matches)}
+			respJSON, _ := json.Marshal(resp)
+			return &types.ResourceResult{StatusCode: 200, Body: respJSON}, nil
+		}
+	}
+
+	return &types.ResourceResult{StatusCode: 403, Body: []byte(`{"error":"no valid operation permission provided"}`)}, nil
 }
 
 // AllowAllAuth is a passthrough authentication driver for testing
@@ -369,10 +395,10 @@ func (h *SimpleInvocationHandler) Invoke(ctx context.Context, req *types.Invocat
 	}
 
 	resourceCall := &types.ResourceCall{
-		URI:     uri,
-		Method:  "EXECUTE",
-		Body:    argsJSON,
-		Context: req.Context,
+		URI:         uri,
+		Body:        argsJSON,
+		Context:     req.Context,
+		Permissions: []string{"invoke"},
 	}
 
 	result, err := h.resourceBus.Call(ctx, resourceCall)

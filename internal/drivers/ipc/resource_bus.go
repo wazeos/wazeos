@@ -30,8 +30,8 @@ func (b *IPCResourceBus) Call(ctx context.Context, call *types.ResourceCall) (*t
 	// Audit log: incoming request
 	fmt.Printf("\n[IPC-BUS] ═══════════════════════════════════════════════════════\n")
 	fmt.Printf("[IPC-BUS] Incoming Request\n")
-	fmt.Printf("[IPC-BUS]   Method: %s\n", call.Method)
 	fmt.Printf("[IPC-BUS]   URI: %s\n", call.URI)
+	fmt.Printf("[IPC-BUS]   Permissions: %v\n", call.Permissions)
 
 	if len(call.Headers) > 0 {
 		fmt.Printf("[IPC-BUS]   Headers:\n")

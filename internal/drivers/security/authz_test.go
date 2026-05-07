@@ -26,8 +26,8 @@ func TestAuthz_SetPermissions(t *testing.T) {
 	ctx := context.Background()
 
 	permissions := types.NewPermissionContext([]types.PermissionEntry{
-		{URIPattern: "file:///data/*", Access: types.AccessRead | types.AccessWrite},
-		{URIPattern: "http://api.example.com/*", Access: types.AccessRead},
+		{URIPattern: "file:///data/*", Permissions: []string{"read", "write"}},
+		{URIPattern: "http://api.example.com/*", Permissions: []string{"read"}},
 	})
 
 	err := authz.SetPermissions(ctx, "user:alice", permissions)
@@ -74,7 +74,7 @@ func TestAuthz_GetPermissions_ReturnsCopy(t *testing.T) {
 	ctx := context.Background()
 
 	original := types.NewPermissionContext([]types.PermissionEntry{
-		{URIPattern: "file:///data/*", Access: types.AccessRead},
+		{URIPattern: "file:///data/*", Permissions: []string{"read"}},
 	})
 
 	err := authz.SetPermissions(ctx, "user:alice", original)
@@ -85,58 +85,58 @@ func TestAuthz_GetPermissions_ReturnsCopy(t *testing.T) {
 	require.NoError(t, err)
 
 	// Modify retrieved permissions
-	retrieved.Entries[0].Access = types.AccessWrite
+	retrieved.Entries[0].Permissions = []string{"write"}
 
 	// Get permissions again and verify original wasn't modified
 	retrieved2, err := authz.GetPermissions(ctx, "user:alice")
 	require.NoError(t, err)
-	assert.Equal(t, types.AccessRead, retrieved2.Entries[0].Access)
+	assert.Equal(t, []string{"read"}, retrieved2.Entries[0].Permissions)
 }
 
 func TestAuthz_CheckAccess_Allowed(t *testing.T) {
 	authz := NewAuthz()
 
 	permissions := types.NewPermissionContext([]types.PermissionEntry{
-		{URIPattern: "file:///data/*", Access: types.AccessRead | types.AccessWrite},
-		{URIPattern: "http://api.example.com/*", Access: types.AccessRead},
-		{URIPattern: "fn://my-app/*", Access: types.AccessExecute},
+		{URIPattern: "file:///data/*", Permissions: []string{"read", "write"}},
+		{URIPattern: "http://api.example.com/*", Permissions: []string{"read"}},
+		{URIPattern: "fn://my-app/*", Permissions: []string{"execute"}},
 	})
 
 	tests := []struct {
-		name string
-		uri  string
-		mode types.AccessBits
+		name         string
+		uri          string
+		requiredPerms []string
 	}{
 		{
-			name: "file read allowed",
-			uri:  "file:///data/test.txt",
-			mode: types.AccessRead,
+			name:         "file read allowed",
+			uri:          "file:///data/test.txt",
+			requiredPerms: []string{"read"},
 		},
 		{
-			name: "file write allowed",
-			uri:  "file:///data/test.txt",
-			mode: types.AccessWrite,
+			name:         "file write allowed",
+			uri:          "file:///data/test.txt",
+			requiredPerms: []string{"write"},
 		},
 		{
-			name: "file read+write allowed",
-			uri:  "file:///data/test.txt",
-			mode: types.AccessRead | types.AccessWrite,
+			name:         "file read+write allowed",
+			uri:          "file:///data/test.txt",
+			requiredPerms: []string{"read", "write"},
 		},
 		{
-			name: "http read allowed",
-			uri:  "http://api.example.com/v1/users",
-			mode: types.AccessRead,
+			name:         "http read allowed",
+			uri:          "http://api.example.com/v1/users",
+			requiredPerms: []string{"read"},
 		},
 		{
-			name: "fn execute allowed",
-			uri:  "fn://my-app/arg1",
-			mode: types.AccessExecute,
+			name:         "fn execute allowed",
+			uri:          "fn://my-app/arg1",
+			requiredPerms: []string{"execute"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := authz.CheckAccess(tt.uri, tt.mode, permissions)
+			err := authz.CheckAccess(tt.uri, tt.requiredPerms, permissions)
 			assert.NoError(t, err)
 		})
 	}
@@ -146,45 +146,45 @@ func TestAuthz_CheckAccess_Denied(t *testing.T) {
 	authz := NewAuthz()
 
 	permissions := types.NewPermissionContext([]types.PermissionEntry{
-		{URIPattern: "file:///data/*", Access: types.AccessRead},
-		{URIPattern: "http://api.example.com/*", Access: types.AccessRead},
+		{URIPattern: "file:///data/*", Permissions: []string{"read"}},
+		{URIPattern: "http://api.example.com/*", Permissions: []string{"read"}},
 	})
 
 	tests := []struct {
-		name string
-		uri  string
-		mode types.AccessBits
+		name         string
+		uri          string
+		requiredPerms []string
 	}{
 		{
-			name: "file write denied",
-			uri:  "file:///data/test.txt",
-			mode: types.AccessWrite,
+			name:         "file write denied",
+			uri:          "file:///data/test.txt",
+			requiredPerms: []string{"write"},
 		},
 		{
-			name: "file execute denied",
-			uri:  "file:///data/test.txt",
-			mode: types.AccessExecute,
+			name:         "file execute denied",
+			uri:          "file:///data/test.txt",
+			requiredPerms: []string{"execute"},
 		},
 		{
-			name: "http write denied",
-			uri:  "http://api.example.com/v1/users",
-			mode: types.AccessWrite,
+			name:         "http write denied",
+			uri:          "http://api.example.com/v1/users",
+			requiredPerms: []string{"write"},
 		},
 		{
-			name: "no matching pattern",
-			uri:  "s3://bucket/object",
-			mode: types.AccessRead,
+			name:         "no matching pattern",
+			uri:          "s3://bucket/object",
+			requiredPerms: []string{"read"},
 		},
 		{
-			name: "different path",
-			uri:  "file:///other/test.txt",
-			mode: types.AccessRead,
+			name:         "different path",
+			uri:          "file:///other/test.txt",
+			requiredPerms: []string{"read"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := authz.CheckAccess(tt.uri, tt.mode, permissions)
+			err := authz.CheckAccess(tt.uri, tt.requiredPerms, permissions)
 			assert.Error(t, err)
 			assert.True(t, types.IsPermissionDenied(err))
 		})
@@ -194,7 +194,7 @@ func TestAuthz_CheckAccess_Denied(t *testing.T) {
 func TestAuthz_CheckAccess_NilPermissions(t *testing.T) {
 	authz := NewAuthz()
 
-	err := authz.CheckAccess("file:///data/test.txt", types.AccessRead, nil)
+	err := authz.CheckAccess("file:///data/test.txt", []string{"read"}, nil)
 	assert.Error(t, err)
 	assert.True(t, types.IsPermissionDenied(err))
 }
@@ -435,7 +435,7 @@ func TestAuthz_ConcurrentAccess(t *testing.T) {
 	go func() {
 		for i := 0; i < 100; i++ {
 			permissions := types.NewPermissionContext([]types.PermissionEntry{
-				{URIPattern: "file:///data/*", Access: types.AccessRead},
+				{URIPattern: "file:///data/*", Permissions: []string{"read"}},
 			})
 			_ = authz.SetPermissions(ctx, "user:test", permissions)
 		}

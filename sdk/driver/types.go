@@ -11,10 +11,9 @@ package driver
 // ResourceCall represents an IO call from a wasm app to a resource driver.
 type ResourceCall struct {
 	URI         string            `json:"uri"`
-	Method      string            `json:"method"`
 	Headers     map[string]string `json:"headers"`
 	Body        []byte            `json:"body"`
-	Permissions []string          `json:"permissions"` // Required permissions for this call
+	Permissions []string          `json:"permissions"` // Permissions available for this call
 }
 
 // ResourceResult represents the result of a resource call.

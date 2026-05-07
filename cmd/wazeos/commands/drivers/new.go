@@ -219,29 +219,51 @@ import (
 type Driver struct{}
 
 // HandleCall processes resource operations.
+// The operation is determined by the permissions granted to the call.
 func (d *Driver) HandleCall(call *driver.ResourceCall) (*driver.ResourceResult, error) {
-	switch call.Method {
-	case "READ", "GET":
-		// TODO: Implement read logic
-		// Example: Read data from call.URI
-		return driver.NewSuccessResult(200, []byte(` + "`" + `{"message":"Read operation"}` + "`" + `)), nil
+	// Check permissions to determine which operation to perform
+	hasRead := false
+	hasWrite := false
+	hasDelete := false
+	hasList := false
 
-	case "WRITE", "PUT", "POST":
+	for _, perm := range call.Permissions {
+		switch perm {
+		case "read", "GET":
+			hasRead = true
+		case "write", "PUT", "POST":
+			hasWrite = true
+		case "delete", "DELETE":
+			hasDelete = true
+		case "list", "LIST":
+			hasList = true
+		}
+	}
+
+	// Handle operations based on permissions (priority: write > delete > list > read)
+	if hasWrite {
 		// TODO: Implement write logic
 		// Example: Write call.Body to call.URI
-		return driver.NewSuccessResult(200, []byte(` + "`" + `{"message":"Write operation"}` + "`" + `)), nil
-
-	case "DELETE":
-		// TODO: Implement delete logic
-		return driver.NewSuccessResult(200, []byte(` + "`" + `{"message":"Delete operation"}` + "`" + `)), nil
-
-	case "LIST":
-		// TODO: Implement list logic
-		return driver.NewSuccessResult(200, []byte(` + "`" + `{"items":[]}` + "`" + `)), nil
-
-	default:
-		return driver.NewErrorResult(405, fmt.Sprintf("method not supported: %s", call.Method)), nil
+		return driver.NewResourceResult(200, []byte(` + "`" + `{"message":"Write operation"}` + "`" + `)), nil
 	}
+
+	if hasDelete {
+		// TODO: Implement delete logic
+		return driver.NewResourceResult(200, []byte(` + "`" + `{"message":"Delete operation"}` + "`" + `)), nil
+	}
+
+	if hasList {
+		// TODO: Implement list logic
+		return driver.NewResourceResult(200, []byte(` + "`" + `{"items":[]}` + "`" + `)), nil
+	}
+
+	if hasRead {
+		// TODO: Implement read logic
+		// Example: Read data from call.URI
+		return driver.NewResourceResult(200, []byte(` + "`" + `{"message":"Read operation"}` + "`" + `)), nil
+	}
+
+	return driver.NewErrorResult(403, "no valid operation permission provided"), nil
 }
 
 func main() {
@@ -390,15 +412,19 @@ Edit the `+"`HandleCall`"+` method in `+"`main.go`"+` to process resource operat
 
 `+"```go"+`
 func (d *Driver) HandleCall(call *driver.ResourceCall) (*driver.ResourceResult, error) {
-    // Access the resource URI and method
+    // Access the resource URI and permissions
     uri := call.URI
-    method := call.Method
+    permissions := call.Permissions
+
+    // Check which operations are allowed
+    hasRead := contains(permissions, "read")
+    hasWrite := contains(permissions, "write")
 
     // For write operations, access the body
     body := call.Body
 
     // Return a success result
-    return driver.NewSuccessResult(200, responseData), nil
+    return driver.NewResourceResult(200, responseData), nil
 
     // Or return an error result
     return driver.NewErrorResult(404, "not found"), nil

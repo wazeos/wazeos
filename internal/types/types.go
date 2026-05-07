@@ -366,12 +366,11 @@ type InvocationResult struct {
 
 // ResourceCall represents an IO call from a wasm app to a resource driver.
 type ResourceCall struct {
-	Context    *ExecutionContext
-	URI        string            // Target URI (e.g., "file:///tmp/data.txt")
-	Method     string            // Operation method (e.g., "GET", "POST", "READ", "WRITE")
-	Headers    map[string]string // Protocol-specific headers
-	Body       []byte            // Request payload
-	AccessMode AccessBits        // Required access (Read, Write, Execute)
+	Context     *ExecutionContext
+	URI         string            // Target URI (e.g., "file:///tmp/data.txt")
+	Headers     map[string]string // Protocol-specific headers
+	Body        []byte            // Request payload
+	Permissions []string          // Permissions available for this call (e.g., ["read", "write"])
 }
 
 // ResourceResult represents the result of a resource call.
@@ -661,11 +660,11 @@ type AuditEvent struct {
 // ResourceCallAuditEvent represents an audit event for a resource call.
 type ResourceCallAuditEvent struct {
 	AuditEvent
-	URI        string `json:"uri"`
-	Method     string `json:"method"`
-	Driver     string `json:"driver"`     // Which driver handled it
-	StatusCode int    `json:"statusCode"` // Result status code
-	Duration   int64  `json:"duration"`   // Duration in nanoseconds
+	URI         string   `json:"uri"`
+	Permissions []string `json:"permissions"` // Permissions used for this call
+	Driver      string   `json:"driver"`      // Which driver handled it
+	StatusCode  int      `json:"statusCode"`  // Result status code
+	Duration    int64    `json:"duration"`    // Duration in nanoseconds
 }
 
 // AuthzCheckAuditEvent represents an audit event for an authorization check.

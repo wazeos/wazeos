@@ -92,7 +92,7 @@ func (m *mockSecurityAuthz) SetPermissions(ctx context.Context, principal string
 	return nil
 }
 
-func (m *mockSecurityAuthz) CheckAccess(uri string, mode types.AccessBits, permissions *types.PermissionContext) error {
+func (m *mockSecurityAuthz) CheckAccess(uri string, requiredPermissions []string, permissions *types.PermissionContext) error {
 	return nil
 }
 
@@ -725,12 +725,11 @@ func TestKernel_HostResourceCall(t *testing.T) {
 
 	// Create a resource call
 	call := &types.ResourceCall{
-		Context:    execCtx,
-		URI:        "test://example",
-		Method:     "GET",
-		Headers:    make(map[string]string),
-		Body:       []byte{},
-		AccessMode: types.AccessRead,
+		Context:     execCtx,
+		URI:         "test://example",
+		Headers:     make(map[string]string),
+		Body:        []byte{},
+		Permissions: []string{"read"},
 	}
 
 	// Marshal to JSON
@@ -756,7 +755,7 @@ func TestKernel_HostAuthzCheck(t *testing.T) {
 
 	ctx := context.Background()
 	permissions := types.NewPermissionContext([]types.PermissionEntry{
-		{URIPattern: "file:///*", Access: types.AccessRead},
+		{URIPattern: "file:///*", Permissions: []string{"read"}},
 	})
 
 	// Test allowed access
