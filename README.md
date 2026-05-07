@@ -402,6 +402,66 @@ func (d *MyDriver) HandleCall(ctx context.Context, call *types.ResourceCall) (*t
 
 Note: The driver class (e.g., "io.resource") is specified in the metadata.json file when packaging the driver, not in the Name() method.
 
+### Error Handling Pattern for Drivers
+
+WazeOS drivers should follow a consistent error handling pattern to ensure predictable behavior:
+
+#### Resource Drivers (`HandleCall` method)
+
+**Driver-level failures** (connection errors, internal errors, driver misconfiguration):
+- Return `(nil, error)` - indicates the driver itself failed to process the request
+- Examples: database connection failure, invalid configuration, driver initialization error
+
+**Application-level errors** (not found, validation failures, permission denied):
+- Return `(*ResourceResult with error field, nil)` - indicates the request was processed but resulted in an application error
+- Set appropriate `StatusCode` (404, 400, 403, etc.)
+- Populate the `Error` field with a descriptive message
+- Examples: file not found, invalid input, access denied
+
+**Success:**
+- Return `(*ResourceResult with StatusCode 200, nil)`
+- Populate `Body` with the response data
+
+**Example:**
+```go
+func (d *MyDriver) HandleCall(ctx context.Context, call *types.ResourceCall) (*types.ResourceResult, error) {
+    // Driver-level failure - connection error
+    conn, err := d.connect()
+    if err != nil {
+        return nil, fmt.Errorf("failed to connect to backend: %w", err)
+    }
+
+    // Application-level error - not found
+    data, err := conn.Get(call.URI)
+    if err == ErrNotFound {
+        return &types.ResourceResult{
+            StatusCode: 404,
+            Headers:    make(map[string]string),
+            Body:       []byte(`{"error":"resource not found"}`),
+            Error:      "resource not found",
+        }, nil
+    }
+
+    // Driver-level failure - unexpected error
+    if err != nil {
+        return nil, fmt.Errorf("unexpected backend error: %w", err)
+    }
+
+    // Success
+    return &types.ResourceResult{
+        StatusCode: 200,
+        Headers:    make(map[string]string),
+        Body:       data,
+    }, nil
+}
+```
+
+#### Request Drivers (`Start` and `Stop` methods)
+
+Request drivers should return errors only for critical failures that prevent the driver from starting or stopping:
+- Return `error` if the driver cannot start listening
+- Return `error` if the driver cannot gracefully shutdown
+
 ## Configuration
 
 WazeOS can be configured via:

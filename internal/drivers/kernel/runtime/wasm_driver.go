@@ -34,7 +34,7 @@ func NewWasmResourceDriver(name string, patterns []string, runtime *RuntimeExec,
 	}
 }
 
-// Name returns the driver class.
+// Name returns the driver name in author/name format.
 func (w *WasmResourceDriver) Name() string {
 	return w.name
 }
@@ -145,7 +145,7 @@ func NewWasmAuthDriver(name string, runtime *RuntimeExec, compiled wazero.Compil
 	}
 }
 
-// Name returns the driver class.
+// Name returns the driver name in author/name format.
 func (w *WasmAuthDriver) Name() string {
 	return w.name
 }
@@ -254,12 +254,12 @@ func LoadInstalledResourceDrivers(ctx context.Context, pkgMgr types.PackageManag
 			return nil, fmt.Errorf("failed to compile driver for patterns %v: %w", metadata.URIPatterns, err)
 		}
 
-		// Infer driver class from URI patterns (all resource drivers use "io.resource")
-		driverClass := types.InferDriverClass(metadata.URIPatterns[0])
+		// Construct driver name in author/name format
+		driverName := fmt.Sprintf("%s/%s", metadata.Author, metadata.Name)
 
 		// Create WASM resource driver wrapper
 		driver := NewWasmResourceDriver(
-			driverClass,
+			driverName,
 			metadata.URIPatterns,
 			runtime,
 			compiled,

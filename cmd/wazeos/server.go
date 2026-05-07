@@ -258,7 +258,7 @@ func NewInMemorySecretsStore() *InMemorySecretsStore {
 }
 
 func (s *InMemorySecretsStore) Name() string {
-	return "kernel.security.secrets"
+	return "wazeos/secrets"
 }
 
 func (s *InMemorySecretsStore) Patterns() []string {
@@ -353,7 +353,7 @@ func (s *InMemorySecretsStore) HandleCall(ctx context.Context, call *types.Resou
 type AllowAllAuth struct{}
 
 func (a *AllowAllAuth) Name() string {
-	return "allow-all-auth"
+	return "wazeos/allow-all"
 }
 
 func (a *AllowAllAuth) Authenticate(ctx context.Context, payload *types.AuthPayload) (string, error) {
