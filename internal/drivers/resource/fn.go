@@ -56,7 +56,7 @@ func (f *FnDriver) HandleCall(ctx context.Context, call *types.ResourceCall) (*t
 			StatusCode: 500,
 			Headers:    make(map[string]string),
 			Body:       []byte("fn driver not initialized: invoker not set"),
-			Error:      types.ErrInternal,
+			Error:      types.ErrInternal.Error(),
 		}, types.ErrInternal
 	}
 
@@ -67,7 +67,7 @@ func (f *FnDriver) HandleCall(ctx context.Context, call *types.ResourceCall) (*t
 			StatusCode: 400,
 			Headers:    make(map[string]string),
 			Body:       []byte(fmt.Sprintf("invalid fn:// URI: %v", err)),
-			Error:      types.ErrInvalidRequest,
+			Error:      types.ErrInvalidRequest.Error(),
 		}, types.ErrInvalidRequest
 	}
 
@@ -77,7 +77,7 @@ func (f *FnDriver) HandleCall(ctx context.Context, call *types.ResourceCall) (*t
 			StatusCode: 400,
 			Headers:    make(map[string]string),
 			Body:       []byte("fn:// URI must specify app name: fn://app-name/args"),
-			Error:      types.ErrInvalidRequest,
+			Error:      types.ErrInvalidRequest.Error(),
 		}, types.ErrInvalidRequest
 	}
 
@@ -95,7 +95,7 @@ func (f *FnDriver) HandleCall(ctx context.Context, call *types.ResourceCall) (*t
 			StatusCode: 404,
 			Headers:    make(map[string]string),
 			Body:       []byte(fmt.Sprintf("app not found: %s", appName)),
-			Error:      types.ErrNotFound,
+			Error:      types.ErrNotFound.Error(),
 		}, types.ErrNotFound
 	}
 
@@ -106,7 +106,7 @@ func (f *FnDriver) HandleCall(ctx context.Context, call *types.ResourceCall) (*t
 			StatusCode: 508, // Loop Detected
 			Headers:    make(map[string]string),
 			Body:       []byte(fmt.Sprintf("maximum call depth %d exceeded", f.maxDepth)),
-			Error:      types.ErrMaxDepthExceeded,
+			Error:      types.ErrMaxDepthExceeded.Error(),
 		}, types.ErrMaxDepthExceeded
 	}
 
@@ -116,7 +116,7 @@ func (f *FnDriver) HandleCall(ctx context.Context, call *types.ResourceCall) (*t
 			StatusCode: 508,
 			Headers:    make(map[string]string),
 			Body:       []byte(fmt.Sprintf("cycle detected: app %s already in call chain", appID)),
-			Error:      types.ErrCycleDetected,
+			Error:      types.ErrCycleDetected.Error(),
 		}, types.ErrCycleDetected
 	}
 
@@ -146,7 +146,7 @@ func (f *FnDriver) HandleCall(ctx context.Context, call *types.ResourceCall) (*t
 			StatusCode: 500,
 			Headers:    make(map[string]string),
 			Body:       []byte(fmt.Sprintf("invocation failed: %v", err)),
-			Error:      err,
+			Error:      err.Error(),
 		}, err
 	}
 
@@ -167,7 +167,7 @@ func (f *FnDriver) HandleCall(ctx context.Context, call *types.ResourceCall) (*t
 		StatusCode: statusCode,
 		Headers:    map[string]string{"X-Exit-Code": fmt.Sprintf("%d", result.ExitCode)},
 		Body:       output,
-		Error:      nil,
+		Error:      "",
 	}, nil
 }
 

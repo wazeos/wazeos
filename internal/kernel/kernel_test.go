@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/wazeos/wazeos/internal/kernel/iobus"
 	"github.com/wazeos/wazeos/internal/types"
 )
 
@@ -716,7 +717,7 @@ func TestKernel_HostResourceCall(t *testing.T) {
 		name:     "io.resource.test",
 		patterns: []string{"test://*"},
 	}
-	k.resourceBus = NewResourceBus()
+	k.resourceBus = iobus.New(nil)
 	err := k.resourceBus.RegisterDriver(mockDriver)
 	require.NoError(t, err)
 

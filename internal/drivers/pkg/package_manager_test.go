@@ -343,10 +343,12 @@ func TestPackageManager_Install_MissingDependency(t *testing.T) {
 	require.NoError(t, err)
 
 	metadata := &types.AppMetadata{
-		Name:         "test-app",
-		Version:      "1.0.0",
-		Author:       "author",
-		Dependencies: []string{"missing-dep/other-app_1.0.0"},
+		Name:    "test-app",
+		Version: "1.0.0",
+		Author:  "author",
+		DependenciesV2: &types.PackageDependencies{
+			Apps: map[string]string{"other-app": "1.0.0"},
+		},
 	}
 
 	wasmData := []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
@@ -385,10 +387,12 @@ func TestPackageManager_Install_WithDependency(t *testing.T) {
 
 	// Install app with dependency
 	appMetadata := &types.AppMetadata{
-		Name:         "test-app",
-		Version:      "1.0.0",
-		Author:       "author",
-		Dependencies: []string{depMetadata.AppID()},
+		Name:    "test-app",
+		Version: "1.0.0",
+		Author:  "author",
+		DependenciesV2: &types.PackageDependencies{
+			Apps: map[string]string{depMetadata.Name: depMetadata.Version},
+		},
 	}
 
 	appZip, err := createTestZip(appMetadata, wasmData)
@@ -512,10 +516,12 @@ func TestPackageManager_Uninstall_HasDependents(t *testing.T) {
 
 	// Install dependent app
 	depMetadata := &types.AppMetadata{
-		Name:         "dependent-app",
-		Version:      "1.0.0",
-		Author:       "author",
-		Dependencies: []string{base.AppID()},
+		Name:    "dependent-app",
+		Version: "1.0.0",
+		Author:  "author",
+		DependenciesV2: &types.PackageDependencies{
+			Apps: map[string]string{base.Name: base.Version},
+		},
 	}
 
 	depZip, err := createTestZip(depMetadata, wasmData)

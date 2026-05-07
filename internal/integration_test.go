@@ -108,7 +108,7 @@ func TestEndToEnd_WASMDriver_FileRead(t *testing.T) {
 				StatusCode: 500,
 				Headers:    make(map[string]string),
 				Body:       []byte(fmt.Sprintf("resource call failed: %v", err)),
-				Error:      err,
+				Error:      err.Error(),
 			}
 		}
 
@@ -123,8 +123,8 @@ func TestEndToEnd_WASMDriver_FileRead(t *testing.T) {
 			Headers:    result.Headers,
 			Body:       result.Body,
 		}
-		if result.Error != nil {
-			sdkResult.Error = result.Error.Error()
+		if result.Error != "" {
+			sdkResult.Error = result.Error
 		}
 
 		return json.Marshal(sdkResult)

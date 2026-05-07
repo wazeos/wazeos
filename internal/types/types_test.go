@@ -406,13 +406,13 @@ func TestInvocationResult_Success(t *testing.T) {
 		ExitCode:   0,
 		Duration:   100 * time.Millisecond,
 		MemoryUsed: 1024 * 1024, // 1MB
-		Error:      nil,
+
 	}
 
 	assert.Equal(t, "req-123", result.RequestID)
 	assert.Equal(t, "hello world", string(result.Stdout))
 	assert.Equal(t, 0, result.ExitCode)
-	assert.NoError(t, result.Error)
+	assert.Empty(t, result.Error)
 	assert.Greater(t, result.Duration, time.Duration(0))
 	assert.Greater(t, result.MemoryUsed, int64(0))
 }
@@ -439,11 +439,11 @@ func TestResourceResult_Success(t *testing.T) {
 		StatusCode: 200,
 		Headers:    map[string]string{"Content-Type": "application/json"},
 		Body:       []byte(`{"status":"ok"}`),
-		Error:      nil,
+		Error:      "",
 	}
 
 	assert.Equal(t, 200, result.StatusCode)
-	assert.NoError(t, result.Error)
+	assert.Empty(t, result.Error)
 	assert.Contains(t, result.Headers, "Content-Type")
 	assert.JSONEq(t, `{"status":"ok"}`, string(result.Body))
 }
@@ -453,11 +453,11 @@ func TestResourceResult_Error(t *testing.T) {
 		StatusCode: 403,
 		Headers:    map[string]string{},
 		Body:       []byte("permission denied"),
-		Error:      assert.AnError,
+		Error:      assert.AnError.Error(),
 	}
 
 	assert.Equal(t, 403, result.StatusCode)
-	assert.Error(t, result.Error)
+	assert.NotEmpty(t, result.Error)
 	assert.Equal(t, "permission denied", string(result.Body))
 }
 

@@ -83,7 +83,7 @@ func (w *WasmResourceDriver) HandleCall(ctx context.Context, call *types.Resourc
 				StatusCode: 504,
 				Headers:    make(map[string]string),
 				Body:       []byte("driver timeout"),
-				Error:      types.ErrTimeout,
+				Error:      types.ErrTimeout.Error(),
 			}, types.ErrTimeout
 		}
 
@@ -91,7 +91,7 @@ func (w *WasmResourceDriver) HandleCall(ctx context.Context, call *types.Resourc
 			StatusCode: 500,
 			Headers:    make(map[string]string),
 			Body:       []byte(fmt.Sprintf("driver error: %v", err)),
-			Error:      err,
+			Error:      err.Error(),
 		}, err
 	}
 	defer module.Close(execCtx)
@@ -110,7 +110,7 @@ func (w *WasmResourceDriver) HandleCall(ctx context.Context, call *types.Resourc
 			StatusCode: 500,
 			Headers:    make(map[string]string),
 			Body:       []byte(fmt.Sprintf("failed to parse driver response: %v\nstderr: %s", err, stderrOutput)),
-			Error:      fmt.Errorf("invalid driver response: %w", err),
+			Error:      fmt.Sprintf("invalid driver response: %v", err),
 		}, err
 	}
 
@@ -121,7 +121,7 @@ func (w *WasmResourceDriver) HandleCall(ctx context.Context, call *types.Resourc
 		Body:       sdkResult.Body,
 	}
 	if sdkResult.Error != "" {
-		result.Error = fmt.Errorf("%s", sdkResult.Error)
+		result.Error = fmt.Sprintf("%s", sdkResult.Error)
 	}
 
 	return result, nil

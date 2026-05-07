@@ -81,7 +81,7 @@ func (rb *ResourceBus) Call(ctx context.Context, call *types.ResourceCall) (*typ
 			StatusCode: 404,
 			Headers:    make(map[string]string),
 			Body:       []byte(fmt.Sprintf("no driver found for URI: %s", call.URI)),
-			Error:      types.ErrNotFound,
+			Error:      types.ErrNotFound.Error(),
 		}
 
 		// Emit audit event for failed call
@@ -283,7 +283,7 @@ func (rb *ResourceBus) emitResourceCallAudit(call *types.ResourceCall, result *t
 			ID:        uuid.New().String(),
 			Timestamp: time.Now(),
 			Type:      types.AuditEventResourceCall,
-			Success:   result != nil && result.Error == nil,
+			Success:   result != nil && result.Error == "",
 		},
 		URI:         call.URI,
 		Permissions: call.Permissions,
@@ -299,8 +299,8 @@ func (rb *ResourceBus) emitResourceCallAudit(call *types.ResourceCall, result *t
 
 	if result != nil {
 		event.StatusCode = result.StatusCode
-		if result.Error != nil {
-			event.Error = result.Error.Error()
+		if result.Error != "" {
+			event.Error = result.Error
 		}
 	}
 

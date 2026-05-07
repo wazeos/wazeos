@@ -147,19 +147,22 @@ func intersectPermissions(perms1, perms2 []string) []string {
 
 // Intersect returns a new PermissionContext with the intersection of permissions.
 // Used when chaining fn:// calls to reduce permissions at each hop.
+// For overlapping URI patterns, the more specific pattern is used.
 func (pc *PermissionContext) Intersect(other *PermissionContext) *PermissionContext {
-	// Simple implementation: only include entries that exist in both contexts
-	// For MVP, we'll use exact pattern matching
 	result := make([]PermissionEntry, 0)
 
 	for _, entry1 := range pc.Entries {
 		for _, entry2 := range other.Entries {
-			if entry1.URIPattern == entry2.URIPattern {
+			// Check if patterns overlap
+			if patternsOverlap(entry1.URIPattern, entry2.URIPattern) {
+				// Use the more specific pattern
+				specificPattern := moreSpecificPattern(entry1.URIPattern, entry2.URIPattern)
+
 				// Intersection of permission names
 				intersectedPerms := intersectPermissions(entry1.Permissions, entry2.Permissions)
 				if len(intersectedPerms) > 0 {
 					result = append(result, PermissionEntry{
-						URIPattern:  entry1.URIPattern,
+						URIPattern:  specificPattern,
 						Permissions: intersectedPerms,
 					})
 				}
@@ -168,6 +171,67 @@ func (pc *PermissionContext) Intersect(other *PermissionContext) *PermissionCont
 	}
 
 	return &PermissionContext{Entries: result}
+}
+
+// patternsOverlap checks if two URI patterns can match the same URIs.
+func patternsOverlap(pattern1, pattern2 string) bool {
+	// Exact match
+	if pattern1 == pattern2 {
+		return true
+	}
+
+	// Wildcard always overlaps
+	if pattern1 == "*" || pattern2 == "*" {
+		return true
+	}
+
+	// Check scheme compatibility
+	scheme1 := extractScheme(pattern1)
+	scheme2 := extractScheme(pattern2)
+
+	if scheme1 != "*" && scheme2 != "*" && scheme1 != scheme2 {
+		return false // Different schemes don't overlap
+	}
+
+	// Check if one pattern is more specific than the other
+	// e.g., file:///data/* and file:///data/logs/* overlap
+	if isSubPattern(pattern1, pattern2) || isSubPattern(pattern2, pattern1) {
+		return true
+	}
+
+	return false
+}
+
+// extractScheme extracts the scheme from a URI pattern.
+func extractScheme(pattern string) string {
+	if idx := strings.Index(pattern, "://"); idx != -1 {
+		return pattern[:idx]
+	}
+	return pattern
+}
+
+// isSubPattern checks if pattern2 is more specific than pattern1.
+func isSubPattern(general, specific string) bool {
+	// Remove wildcards for comparison
+	generalPrefix := strings.TrimSuffix(general, "*")
+	return strings.HasPrefix(specific, generalPrefix)
+}
+
+// moreSpecificPattern returns the more specific of two overlapping patterns.
+func moreSpecificPattern(pattern1, pattern2 string) string {
+	// Wildcard is least specific
+	if pattern1 == "*" {
+		return pattern2
+	}
+	if pattern2 == "*" {
+		return pattern1
+	}
+
+	// Longer patterns are generally more specific
+	if len(pattern1) > len(pattern2) {
+		return pattern1
+	}
+	return pattern2
 }
 
 // ExecutionContext carries execution state through the driver pipeline.
@@ -210,11 +274,10 @@ func (ec *ExecutionContext) ChildContext(newRequestID string, newPermissions *Pe
 
 // WazeroPermissions represents wazero-specific capabilities.
 type WazeroPermissions struct {
-	Network   []string `json:"network,omitempty"`   // Network access: ["connect", "listen"]
-	FS        []string `json:"fs,omitempty"`        // Filesystem access paths
-	Env       []string `json:"env,omitempty"`       // Environment variables allowed
-	Sockets   bool     `json:"sockets,omitempty"`   // Socket access
-	StdIO     bool     `json:"stdio,omitempty"`     // DEPRECATED: Stdio is always enabled for all modules
+	Network []string `json:"network,omitempty"` // Network access: ["connect", "listen"]
+	FS      []string `json:"fs,omitempty"`      // Filesystem access paths
+	Env     []string `json:"env,omitempty"`     // Environment variables allowed
+	Sockets bool     `json:"sockets,omitempty"` // Socket access
 }
 
 // DriverPrivileges represents privileges granted TO drivers by wazero.
@@ -240,21 +303,19 @@ type PackageDependencies struct {
 
 // AppMetadata represents parsed metadata from an app package.
 type AppMetadata struct {
-	Name               string                          `json:"name"`
-	Version            string                          `json:"version"`
-	Author             string                          `json:"author"`
-	Description        string                          `json:"description,omitempty"`
-	Type               string                          `json:"type,omitempty"`               // "app" or "driver" (default: "app")
-	DriverClass        string                          `json:"driverClass,omitempty"`        // Driver class if type="driver"
-	URIPatterns        []string                        `json:"uriPatterns,omitempty"`        // URI patterns this driver handles (e.g., ["file://*/*"])
-	Dependencies       []string                        `json:"dependencies,omitempty"`       // DEPRECATED: Legacy flat format, use DependenciesV2
-	DependenciesV2     *PackageDependencies            `json:"dependenciesV2,omitempty"`     // Structured dependencies (apps and drivers separated)
-	Entrypoint         string                          `json:"entrypoint,omitempty"`         // Wasm entrypoint (default: "_start")
-	Prerequisites      []string                        `json:"prerequisites,omitempty"`      // DEPRECATED: Legacy flat format, use PrerequisitesV2
-	PrerequisitesV2    *PackageDependencies            `json:"prerequisitesV2,omitempty"`    // Structured prerequisites (apps and drivers separated)
-	Privileges         *DriverPrivileges               `json:"privileges,omitempty"`         // System privileges for drivers (wazero capabilities)
-	Permissions        []PermissionDefinitionMetadata  `json:"permissions,omitempty"`        // Access control permissions exposed by drivers
-	InputSchema        *json.RawMessage                `json:"inputSchema,omitempty"`        // MCP tool schema (JSON Schema format)
+	Name            string                         `json:"name"`
+	Version         string                         `json:"version"`
+	Author          string                         `json:"author"`
+	Description     string                         `json:"description,omitempty"`
+	Type            string                         `json:"type,omitempty"`            // "app" or "driver" (default: "app")
+	DriverClass     string                         `json:"driverClass,omitempty"`     // Driver class if type="driver"
+	URIPatterns     []string                       `json:"uriPatterns,omitempty"`     // URI patterns this driver handles (e.g., ["file://*/*"])
+	DependenciesV2  *PackageDependencies           `json:"dependenciesV2,omitempty"`  // Structured dependencies (apps and drivers separated)
+	Entrypoint      string                         `json:"entrypoint,omitempty"`      // Wasm entrypoint (default: "_start")
+	PrerequisitesV2 *PackageDependencies           `json:"prerequisitesV2,omitempty"` // Structured prerequisites (apps and drivers separated)
+	Privileges      *DriverPrivileges              `json:"privileges,omitempty"`      // System privileges for drivers (wazero capabilities)
+	Permissions     []PermissionDefinitionMetadata `json:"permissions,omitempty"`     // Access control permissions exposed by drivers
+	InputSchema     *json.RawMessage               `json:"inputSchema,omitempty"`     // MCP tool schema (JSON Schema format)
 }
 
 // AppID returns the canonical app identifier.
@@ -289,8 +350,7 @@ func (m *AppMetadata) GetAllDependencies() []string {
 		}
 		return deps
 	}
-	// Fall back to legacy format
-	return m.Dependencies
+	return nil
 }
 
 // GetAllPrerequisites returns all prerequisites as a flat list of package IDs.
@@ -307,8 +367,7 @@ func (m *AppMetadata) GetAllPrerequisites() []string {
 		}
 		return prereqs
 	}
-	// Fall back to legacy format
-	return m.Prerequisites
+	return nil
 }
 
 // GetDependencyType returns the type of a dependency ("app" or "driver") if using structured format.
@@ -378,7 +437,7 @@ type ResourceResult struct {
 	StatusCode int               // Protocol-specific status (HTTP status, 0 for success, etc.)
 	Headers    map[string]string // Response headers
 	Body       []byte            // Response payload
-	Error      error             // Non-nil if call failed
+	Error      string            // Error message if call failed (empty string if successful)
 }
 
 // AuthPayload represents authentication input from a request.

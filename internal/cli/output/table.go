@@ -103,12 +103,26 @@ func (f *TableFormatter) FormatPackageDetails(app *types.AppMetadata) (string, e
 		details = append(details, struct{ label, value string }{"Driver Class", app.DriverClass})
 	}
 
-	if len(app.Dependencies) > 0 {
-		details = append(details, struct{ label, value string }{"Dependencies", strings.Join(app.Dependencies, ", ")})
+	if app.DependenciesV2 != nil && (len(app.DependenciesV2.Apps) > 0 || len(app.DependenciesV2.Drivers) > 0) {
+		var deps []string
+		for name, ver := range app.DependenciesV2.Apps {
+			deps = append(deps, fmt.Sprintf("app:%s@%s", name, ver))
+		}
+		for name, ver := range app.DependenciesV2.Drivers {
+			deps = append(deps, fmt.Sprintf("driver:%s@%s", name, ver))
+		}
+		details = append(details, struct{ label, value string }{"Dependencies", strings.Join(deps, ", ")})
 	}
 
-	if len(app.Prerequisites) > 0 {
-		details = append(details, struct{ label, value string }{"Prerequisites", strings.Join(app.Prerequisites, ", ")})
+	if app.PrerequisitesV2 != nil && (len(app.PrerequisitesV2.Apps) > 0 || len(app.PrerequisitesV2.Drivers) > 0) {
+		var prereqs []string
+		for name, ver := range app.PrerequisitesV2.Apps {
+			prereqs = append(prereqs, fmt.Sprintf("app:%s@%s", name, ver))
+		}
+		for name, ver := range app.PrerequisitesV2.Drivers {
+			prereqs = append(prereqs, fmt.Sprintf("driver:%s@%s", name, ver))
+		}
+		details = append(details, struct{ label, value string }{"Prerequisites", strings.Join(prereqs, ", ")})
 	}
 
 	// Print details
