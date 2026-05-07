@@ -115,7 +115,7 @@ func TestNewPackageManager(t *testing.T) {
 	pm, err := NewPackageManager(tmpDir, runtime)
 	assert.NoError(t, err)
 	assert.NotNil(t, pm)
-	assert.Equal(t, "kernel.pkg", pm.Name())
+	assert.Equal(t, "pkgmgr", pm.Name())
 
 	// Verify directory was created
 	_, err = os.Stat(tmpDir)

@@ -54,7 +54,7 @@ func NewRuntimeExec(timeout time.Duration) *RuntimeExec {
 
 // Name returns the driver class.
 func (r *RuntimeExec) Name() string {
-	return "kernel.runtime.exec"
+	return "runtime.exec"
 }
 
 // SetResourceBus provides access to the resource driver bus.

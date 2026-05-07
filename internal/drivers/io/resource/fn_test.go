@@ -36,7 +36,7 @@ type mockPackageManager struct {
 }
 
 func (m *mockPackageManager) Name() string {
-	return "kernel.pkg"
+	return "pkgmgr"
 }
 
 func (m *mockPackageManager) Install(ctx context.Context, zipData []byte) (*types.AppMetadata, error) {

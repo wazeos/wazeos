@@ -128,8 +128,8 @@ func runServer(cmd *cobra.Command, args []string) {
 
 	// Wrap with authz injection layer
 	authzLayer := security.NewAuthzInjectionLayer(resourceBus)
-	authzLayer.RegisterScheme("secret", "kernel.security.secrets")
-	authzLayer.RegisterScheme("fn", "kernel.runtime.exec")
+	authzLayer.RegisterScheme("secret", "security.secrets")
+	authzLayer.RegisterScheme("fn", "runtime.exec")
 
 	// Create simple auth driver for testing
 	authDrivers := []types.SecurityAuthn{&AllowAllAuth{}}

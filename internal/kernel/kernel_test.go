@@ -82,7 +82,7 @@ func (m *mockSecurityAuthn) Authenticate(ctx context.Context, payload *types.Aut
 type mockSecurityAuthz struct{}
 
 func (m *mockSecurityAuthz) Name() string {
-	return "kernel.security.authz"
+	return "security.authz"
 }
 
 func (m *mockSecurityAuthz) GetPermissions(ctx context.Context, principal string) (*types.PermissionContext, error) {
@@ -100,7 +100,7 @@ func (m *mockSecurityAuthz) CheckAccess(uri string, requiredPermissions []string
 type mockPackageManager struct{}
 
 func (m *mockPackageManager) Name() string {
-	return "kernel.pkg"
+	return "pkgmgr"
 }
 
 func (m *mockPackageManager) Install(ctx context.Context, zipData []byte) (*types.AppMetadata, error) {
@@ -136,7 +136,7 @@ type mockRuntimeExec struct {
 }
 
 func (m *mockRuntimeExec) Name() string {
-	return "kernel.runtime.exec"
+	return "runtime.exec"
 }
 
 func (m *mockRuntimeExec) LoadApp(ctx context.Context, appID string, wasmBytes []byte) error {
@@ -564,7 +564,7 @@ type failingRuntimeExec struct {
 }
 
 func (f *failingRuntimeExec) Name() string {
-	return "kernel.runtime.exec"
+	return "runtime.exec"
 }
 
 func (f *failingRuntimeExec) LoadApp(ctx context.Context, appID string, wasmBytes []byte) error {
@@ -635,7 +635,7 @@ func newTrackingRuntimeExec() *trackingRuntimeExec {
 }
 
 func (t *trackingRuntimeExec) Name() string {
-	return "kernel.runtime.exec"
+	return "runtime.exec"
 }
 
 func (t *trackingRuntimeExec) LoadApp(ctx context.Context, appID string, wasmBytes []byte) error {

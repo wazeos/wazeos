@@ -83,7 +83,7 @@ func runNewDriver(cmd *cobra.Command, args []string) {
 		fmt.Println("                            URI patterns determine the specific resource type")
 		fmt.Println("  io.function             - Function execution driver")
 		fmt.Println("  kernel.security.authn   - Authentication provider")
-		fmt.Println("  kernel.security.authz   - Authorization/permissions provider")
+		fmt.Println("  security.authz   - Authorization/permissions provider")
 		fmt.Println("  kernel.security.audit   - Audit logging driver")
 		fmt.Println("  kernel.ipc              - Inter-process communication / message queues")
 		fmt.Println()

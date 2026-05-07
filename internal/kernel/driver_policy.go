@@ -12,7 +12,7 @@ import (
 // Examples:
 //   - "io.request.http" → "io.request"
 //   - "io.resource" → "io.resource"
-//   - "kernel.runtime.exec" → "kernel.runtime.exec"
+//   - "runtime.exec" → "runtime.exec"
 func extractDriverClass(driverName string) string {
 	parts := strings.Split(driverName, ".")
 
@@ -58,19 +58,19 @@ func NewDriverPolicyRegistry() types.DriverPolicyRegistry {
 			Description: "Request drivers for inbound requests - at least one required",
 		},
 		{
-			Class:       "kernel.runtime.exec",
+			Class:       "runtime.exec",
 			Cardinality: types.CardinalityOne,
 			Requirement: types.RequirementRequired,
 			Description: "Runtime execution engine - exactly one required",
 		},
 		{
-			Class:       "kernel.pkg",
+			Class:       "pkgmgr",
 			Cardinality: types.CardinalityOne,
 			Requirement: types.RequirementRequired,
 			Description: "Package manager - exactly one required",
 		},
 		{
-			Class:       "kernel.security.authz",
+			Class:       "security.authz",
 			Cardinality: types.CardinalityOne,
 			Requirement: types.RequirementRequired,
 			Description: "Authorization engine - exactly one required",

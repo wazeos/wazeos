@@ -92,7 +92,7 @@ func NewPackageManager(dataPath string, runtime types.RuntimeExec) (*PackageMana
 
 // Name returns the driver class.
 func (pm *PackageManager) Name() string {
-	return "kernel.pkg"
+	return "pkgmgr"
 }
 
 // AddChangeListener registers a listener to be notified of package changes.

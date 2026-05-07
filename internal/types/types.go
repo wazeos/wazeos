@@ -494,7 +494,7 @@ type ResourceDriver interface {
 
 // SecurityAuthn extracts principals from requests.
 type SecurityAuthn interface {
-	// Name returns the driver class (e.g., "kernel.security.authn.basic").
+	// Name returns the driver class (e.g., "security.authn.basic").
 	Name() string
 
 	// Authenticate attempts to extract a principal from the request payload.
@@ -506,7 +506,7 @@ type SecurityAuthn interface {
 
 // SecurityAuthz maps principals to permissions and enforces access control.
 type SecurityAuthz interface {
-	// Name returns "kernel.security.authz".
+	// Name returns "security.authz".
 	Name() string
 
 	// GetPermissions returns the permission context for a principal.
@@ -522,7 +522,7 @@ type SecurityAuthz interface {
 
 // PackageManager manages app installation and lifecycle.
 type PackageManager interface {
-	// Name returns "kernel.pkg".
+	// Name returns "pkgmgr".
 	Name() string
 
 	// Install installs an app from a zip file.
@@ -556,7 +556,7 @@ type CompiledModule interface {
 
 // LifecycleManager manages the lifecycle of compiled WASM modules
 type LifecycleManager interface {
-	// Name returns the lifecycle manager name (e.g., "kernel.runtime.lifecycle.lru")
+	// Name returns the lifecycle manager name (e.g., "runtime.lifecycle.lru")
 	Name() string
 
 	// Get retrieves a compiled module from cache, returns nil if not found
@@ -598,7 +598,7 @@ type HostFunction func(ctx context.Context, params []byte) ([]byte, error)
 
 // RuntimeExec manages wazero engine lifecycle and app execution.
 type RuntimeExec interface {
-	// Name returns "kernel.runtime.exec".
+	// Name returns "runtime.exec".
 	Name() string
 
 	// LoadApp compiles and prepares a wasm binary for execution.
@@ -644,7 +644,7 @@ type MetricsSnapshot struct {
 
 // RuntimeTelemetry collects and exports metrics.
 type RuntimeTelemetry interface {
-	// Name returns "kernel.runtime.telemetry".
+	// Name returns "runtime.telemetry".
 	Name() string
 
 	// RecordInvocation logs an invocation event.
@@ -745,7 +745,7 @@ type AppInvokeAuditEvent struct {
 
 // AuditDriver is the interface for audit/logging drivers.
 type AuditDriver interface {
-	// Name returns the driver class (e.g., "kernel.security.audit.syslog").
+	// Name returns the driver class (e.g., "security.audit.syslog").
 	Name() string
 
 	// RecordResourceCall logs a resource call event.

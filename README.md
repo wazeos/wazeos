@@ -148,11 +148,11 @@ Pluggable components that implement system functionality:
 - `io.bus`: Core routing and pattern matching
 
 **Runtime Drivers** (`internal/drivers/kernel/runtime/`):
-- `kernel.runtime.exec`: WebAssembly execution engine with TinyGo support
+- `runtime.exec`: WebAssembly execution engine with TinyGo support
 
 **Security Drivers** (`internal/security/`):
-- `kernel.security.authz`: Authorization and credential injection
-- `kernel.security.secrets`: Secure secrets storage and retrieval
+- `security.authz`: Authorization and credential injection
+- `security.secrets`: Secure secrets storage and retrieval
 
 #### 4. **SDK** (`sdk/`)
 Go SDK for building WazeOS applications:
@@ -179,9 +179,9 @@ WazeOS enforces driver policies to ensure system integrity. Each driver class ha
 | `io.bus` | One | Required | Core I/O routing bus - exactly one required for system operation |
 | `io.resource` | Many | Optional | Resource drivers for external I/O - multiple allowed, not required |
 | `io.request` | Many | Required | Request drivers for inbound requests - at least one required |
-| `kernel.runtime.exec` | One | Required | Runtime execution engine - exactly one required |
-| `kernel.pkg` | One | Required | Package manager - exactly one required |
-| `kernel.security.authz` | One | Required | Authorization engine - exactly one required |
+| `runtime.exec` | One | Required | Runtime execution engine - exactly one required |
+| `pkgmgr` | One | Required | Package manager - exactly one required |
+| `security.authz` | One | Required | Authorization engine - exactly one required |
 
 ### Policy Enforcement
 
@@ -199,7 +199,7 @@ WazeOS enforces driver policies to ensure system integrity. Each driver class ha
 RegisterDriver(io.bus.memory)
 RegisterDriver(io.bus.redis)  // ❌ Violates "One" cardinality
 
-# ERROR: No kernel.runtime.exec driver (requirement violation)
+# ERROR: No runtime.exec driver (requirement violation)
 # System won't start if required drivers are missing ❌
 
 # OK: Multiple io.resource drivers (cardinality: Many)

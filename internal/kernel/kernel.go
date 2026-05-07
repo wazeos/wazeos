@@ -157,7 +157,7 @@ func (k *kernel) SetSecurityAuthz(authz types.SecurityAuthz) error {
 	}
 
 	k.authz = authz
-	k.driverCounts["kernel.security.authz"] = 1
+	k.driverCounts["security.authz"] = 1
 	return nil
 }
 
@@ -179,7 +179,7 @@ func (k *kernel) SetPackageManager(pkg types.PackageManager) error {
 	}
 
 	k.pkg = pkg
-	k.driverCounts["kernel.pkg"] = 1
+	k.driverCounts["pkgmgr"] = 1
 	return nil
 }
 
@@ -201,7 +201,7 @@ func (k *kernel) SetRuntimeExec(exec types.RuntimeExec) error {
 	}
 
 	k.runtimeExec = exec
-	k.driverCounts["kernel.runtime.exec"] = 1
+	k.driverCounts["runtime.exec"] = 1
 	return nil
 }
 

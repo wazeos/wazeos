@@ -25,7 +25,7 @@ func NewAuthz() *Authz {
 
 // Name returns the driver class.
 func (a *Authz) Name() string {
-	return "kernel.security.authz"
+	return "security.authz"
 }
 
 // GetPermissions returns the permission context for a principal.

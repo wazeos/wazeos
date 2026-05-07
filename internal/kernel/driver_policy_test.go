@@ -145,7 +145,7 @@ func TestDriverPolicyRegistry_GetRequiredClasses(t *testing.T) {
 	// Verify default required classes are present
 	assert.Contains(t, required, "io.bus")
 	assert.Contains(t, required, "io.request")
-	assert.Contains(t, required, "kernel.runtime.exec")
+	assert.Contains(t, required, "runtime.exec")
 
 	// Optional classes should not be in the list
 	assert.NotContains(t, required, "io.resource")
