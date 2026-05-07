@@ -245,18 +245,21 @@ func LoadInstalledResourceDrivers(ctx context.Context, pkgMgr types.PackageManag
 		// Read WASM binary
 		wasmBytes, err := pkgMgr.GetWasmBinary(metadata.AppID())
 		if err != nil {
-			return nil, fmt.Errorf("failed to read WASM for driver %q: %w", metadata.DriverClass, err)
+			return nil, fmt.Errorf("failed to read WASM for driver %s: %w", metadata.AppID(), err)
 		}
 
 		// Compile WASM module
 		compiled, err := runtime.CompileWASM(ctx, wasmBytes)
 		if err != nil {
-			return nil, fmt.Errorf("failed to compile driver %q: %w", metadata.DriverClass, err)
+			return nil, fmt.Errorf("failed to compile driver for patterns %v: %w", metadata.URIPatterns, err)
 		}
+
+		// Infer driver class from URI patterns (all resource drivers use "io.resource")
+		driverClass := types.InferDriverClass(metadata.URIPatterns[0])
 
 		// Create WASM resource driver wrapper
 		driver := NewWasmResourceDriver(
-			metadata.DriverClass,
+			driverClass,
 			metadata.URIPatterns,
 			runtime,
 			compiled,

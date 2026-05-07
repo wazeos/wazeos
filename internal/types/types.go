@@ -91,14 +91,13 @@ func (e *PermissionEntry) GetPermissionNames() []string {
 	return e.Permissions
 }
 
-// inferDriverClass extracts the generic driver class from a URI pattern.
+// InferDriverClass extracts the generic driver class from a URI pattern.
 // Returns generic classes only - specific resource types are determined by URI patterns.
 // Examples:
 //   - "file:///data/*" -> "io.resource"
 //   - "https://api.example.com/*" -> "io.resource"
 //   - "fn://app-name/*" -> "io.resource"
-//   - "queue://topic/*" -> "kernel.ipc"
-func inferDriverClass(uriPattern string) string {
+func InferDriverClass(uriPattern string) string {
 	if strings.HasPrefix(uriPattern, "file://") ||
 		strings.HasPrefix(uriPattern, "http://") ||
 		strings.HasPrefix(uriPattern, "https://") ||

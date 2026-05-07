@@ -63,7 +63,7 @@ func TestEndToEnd_WASMDriver_FileRead(t *testing.T) {
 
 	// Create WASM driver wrapper
 	fileDriver := runtime.NewWasmResourceDriver(
-		"io.resource.file",
+		"io.resource",
 		[]string{"file://*/*"},
 		runtimeExec,
 		compiled,
