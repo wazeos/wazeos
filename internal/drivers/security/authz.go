@@ -69,7 +69,7 @@ func (a *Authz) SetPermissions(ctx context.Context, principal string, permission
 }
 
 // CheckAccess validates if a URI access is allowed by the permission context.
-func (a *Authz) CheckAccess(uri string, mode types.AccessBits, permissions *types.PermissionContext) error {
+func (a *Authz) CheckAccess(uri string, requiredPermissions []string, permissions *types.PermissionContext) error {
 	if permissions == nil {
 		return types.ErrPermissionDenied
 	}
@@ -77,8 +77,22 @@ func (a *Authz) CheckAccess(uri string, mode types.AccessBits, permissions *type
 	// Check each permission entry
 	for _, entry := range permissions.Entries {
 		if matchURI(uri, entry.URIPattern) {
-			// Check if required access bits are present
-			if entry.Access.Has(mode) {
+			// Check if all required permissions are present
+			hasAll := true
+			for _, required := range requiredPermissions {
+				found := false
+				for _, perm := range entry.Permissions {
+					if perm == required {
+						found = true
+						break
+					}
+				}
+				if !found {
+					hasAll = false
+					break
+				}
+			}
+			if hasAll {
 				return nil // Access granted
 			}
 		}

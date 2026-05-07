@@ -336,24 +336,19 @@ func (k *kernel) hostResourceCall(ctx context.Context, params []byte) ([]byte, e
 }
 
 // hostAuthzCheck implements the kernel.authz_check host function.
-// Input: JSON with {uri: string, mode: string, permissions: PermissionContext}
+// Input: JSON with {uri: string, requiredPermissions: []string, permissions: PermissionContext}
 // Output: JSON with {allowed: bool, error: string}
 func (k *kernel) hostAuthzCheck(ctx context.Context, params []byte) ([]byte, error) {
 	var input struct {
-		URI         string                    `json:"uri"`
-		Mode        string                    `json:"mode"`
-		Permissions *types.PermissionContext  `json:"permissions"`
+		URI                 string                   `json:"uri"`
+		RequiredPermissions []string                 `json:"requiredPermissions"`
+		Permissions         *types.PermissionContext `json:"permissions"`
 	}
 	if err := json.Unmarshal(params, &input); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal authz check: %w", err)
 	}
 
-	mode, err := types.ParseAccessBits(input.Mode)
-	if err != nil {
-		return nil, err
-	}
-
-	err = k.authz.CheckAccess(input.URI, mode, input.Permissions)
+	err := k.authz.CheckAccess(input.URI, input.RequiredPermissions, input.Permissions)
 
 	output := struct {
 		Allowed bool   `json:"allowed"`

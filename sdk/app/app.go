@@ -162,10 +162,23 @@ func RunConsumer(topic string, handler MessageHandler, opts *ConsumeOptions) {
 		opts = &ConsumeOptions{MaxCount: 10, Timeout: 5}
 	}
 
-	messages, err := ctx.Consume(topic, opts)
+	// Use unified I/O API to consume messages
+	result, err := ctx.IO(fmt.Sprintf("queue://%s", topic), []string{"consume"}).Call(map[string]interface{}{
+		"maxCount": opts.MaxCount,
+		"timeout":  opts.Timeout,
+		"group":    opts.Group,
+	})
 	if err != nil {
 		handleError(ctx, err)
 		os.Exit(1)
+	}
+
+	// Parse messages from result
+	var messages []*Message
+	if messagesData, ok := result["messages"]; ok {
+		if messagesJSON, err := json.Marshal(messagesData); err == nil {
+			json.Unmarshal(messagesJSON, &messages)
+		}
 	}
 
 	// Process each message

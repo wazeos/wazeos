@@ -460,7 +460,7 @@ type SecurityAuthz interface {
 
 	// CheckAccess validates if a URI access is allowed by the permission context.
 	// Returns nil if allowed, error if denied.
-	CheckAccess(uri string, mode AccessBits, permissions *PermissionContext) error
+	CheckAccess(uri string, requiredPermissions []string, permissions *PermissionContext) error
 }
 
 // PackageManager manages app installation and lifecycle.
