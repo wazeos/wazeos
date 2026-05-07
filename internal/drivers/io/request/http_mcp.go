@@ -7,9 +7,9 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"sync"
 
 	"github.com/wazeos/wazeos/internal/types"
+	"github.com/wazeos/wazeos/sdk/driver/base"
 )
 
 // MCPRequest represents an MCP JSON-RPC 2.0 request.
@@ -49,12 +49,11 @@ type MCPContent struct {
 
 // HTTPMCPDriver implements MCP transport over HTTP.
 type HTTPMCPDriver struct {
-	mu         sync.RWMutex
+	*base.BaseDriver
 	addr       string
 	listener   net.Listener
 	server     *http.Server
 	handler    *MCPHandler
-	started    bool
 	actualAddr string // Actual bound address (for testing with :0)
 }
 
@@ -64,50 +63,43 @@ func NewHTTPMCPDriver(addr string, authn []types.SecurityAuthn, authz types.Secu
 		addr = ":8080"
 	}
 
+	config := base.DefaultConfig("wazeos/http", "http://*", "https://*")
 	return &HTTPMCPDriver{
-		addr:    addr,
-		handler: NewMCPHandler(authn, authz, pkgMgr),
+		BaseDriver: base.NewBaseDriver(config),
+		addr:       addr,
+		handler:    NewMCPHandler(authn, authz, pkgMgr),
 	}
-}
-
-// Name returns the driver name.
-func (d *HTTPMCPDriver) Name() string {
-	return "wazeos/http"
-}
-
-// Patterns returns URI patterns this driver handles.
-func (d *HTTPMCPDriver) Patterns() []string {
-	return []string{"http://*", "https://*"}
 }
 
 // SetInvoker provides the callback to dispatch invocations.
 func (d *HTTPMCPDriver) SetInvoker(invoker types.InvocationHandler) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.BaseDriver.SetInvoker(invoker)
 	d.handler.SetInvoker(invoker)
 }
 
 // Start begins listening for inbound requests.
 func (d *HTTPMCPDriver) Start(ctx context.Context) error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	if d.started {
-		return fmt.Errorf("driver already started")
+	// Validate and mark as started
+	if err := d.MarkStarted(); err != nil {
+		return err
 	}
 
-	if d.handler.invoker == nil {
-		return fmt.Errorf("invoker not set")
+	if err := d.ValidateInvoker(); err != nil {
+		d.MarkStopped()
+		return err
 	}
 
 	// Create listener
 	listener, err := net.Listen("tcp", d.addr)
 	if err != nil {
+		d.MarkStopped()
 		return fmt.Errorf("failed to create listener: %w", err)
 	}
 
 	d.listener = listener
 	d.actualAddr = listener.Addr().String()
+
+	d.Logger().Info("HTTP server listening on %s", d.actualAddr)
 
 	// Create HTTP server
 	mux := http.NewServeMux()
@@ -121,23 +113,20 @@ func (d *HTTPMCPDriver) Start(ctx context.Context) error {
 	// Start server in background
 	go func() {
 		if err := d.server.Serve(listener); err != nil && err != http.ErrServerClosed {
-			// Log error but don't crash
-			fmt.Printf("HTTP server error: %v\n", err)
+			d.Logger().Error("HTTP server error: %v", err)
 		}
 	}()
 
-	d.started = true
 	return nil
 }
 
 // Stop gracefully shuts down the driver.
 func (d *HTTPMCPDriver) Stop(ctx context.Context) error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	if !d.started {
+	if !d.IsStarted() {
 		return nil
 	}
+
+	d.Logger().Info("Shutting down HTTP server")
 
 	if d.server != nil {
 		if err := d.server.Shutdown(ctx); err != nil {
@@ -149,14 +138,12 @@ func (d *HTTPMCPDriver) Stop(ctx context.Context) error {
 		d.listener.Close()
 	}
 
-	d.started = false
+	d.MarkStopped()
 	return nil
 }
 
 // Addr returns the actual bound address (useful for testing with port :0).
 func (d *HTTPMCPDriver) Addr() string {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
 	return d.actualAddr
 }
 

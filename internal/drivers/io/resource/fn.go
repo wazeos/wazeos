@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/wazeos/wazeos/internal/drivers/base"
+	"github.com/wazeos/wazeos/sdk/driver/base"
 	"github.com/wazeos/wazeos/internal/types"
 )
 

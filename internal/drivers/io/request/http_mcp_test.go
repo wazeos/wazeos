@@ -164,9 +164,8 @@ func TestHTTPMCPDriver_SetInvoker(t *testing.T) {
 
 	driver.SetInvoker(invoker)
 
-	driver.mu.RLock()
+	assert.Equal(t, invoker, driver.GetInvoker())
 	assert.Equal(t, invoker, driver.handler.invoker)
-	driver.mu.RUnlock()
 }
 
 func TestHTTPMCPDriver_Start_Success(t *testing.T) {
@@ -176,7 +175,7 @@ func TestHTTPMCPDriver_Start_Success(t *testing.T) {
 	ctx := context.Background()
 	err := driver.Start(ctx)
 	assert.NoError(t, err)
-	assert.True(t, driver.started)
+	assert.True(t, driver.IsStarted())
 
 	// Cleanup
 	driver.Stop(ctx)
@@ -218,7 +217,7 @@ func TestHTTPMCPDriver_Stop_Success(t *testing.T) {
 
 	err = driver.Stop(ctx)
 	assert.NoError(t, err)
-	assert.False(t, driver.started)
+	assert.False(t, driver.IsStarted())
 }
 
 func TestHTTPMCPDriver_Stop_NotStarted(t *testing.T) {

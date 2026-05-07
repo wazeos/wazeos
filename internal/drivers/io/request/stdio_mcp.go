@@ -7,18 +7,17 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sync"
 
 	"github.com/wazeos/wazeos/internal/types"
+	"github.com/wazeos/wazeos/sdk/driver/base"
 )
 
 // StdioMCPDriver implements MCP transport over stdin/stdout.
 type StdioMCPDriver struct {
-	mu      sync.RWMutex
+	*base.BaseDriver
 	handler *MCPHandler
 	reader  io.Reader // stdin (or injected for testing)
 	writer  io.Writer // stdout (or injected for testing)
-	started bool
 	done    chan struct{}
 }
 
@@ -28,46 +27,35 @@ func NewStdioMCPDriver(
 	authz types.SecurityAuthz,
 	pkgMgr types.PackageManager,
 ) *StdioMCPDriver {
+	config := base.DefaultConfig("wazeos/stdio", "stdio://*")
 	return &StdioMCPDriver{
-		handler: NewMCPHandler(authn, authz, pkgMgr),
-		reader:  os.Stdin,
-		writer:  os.Stdout,
-		done:    make(chan struct{}),
+		BaseDriver: base.NewBaseDriver(config),
+		handler:    NewMCPHandler(authn, authz, pkgMgr),
+		reader:     os.Stdin,
+		writer:     os.Stdout,
+		done:       make(chan struct{}),
 	}
-}
-
-// Name returns the driver name.
-func (d *StdioMCPDriver) Name() string {
-	return "wazeos/stdio"
-}
-
-// Patterns returns URI patterns this driver handles.
-func (d *StdioMCPDriver) Patterns() []string {
-	return []string{"stdio://*"}
 }
 
 // SetInvoker provides the callback to dispatch invocations.
 func (d *StdioMCPDriver) SetInvoker(invoker types.InvocationHandler) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.BaseDriver.SetInvoker(invoker)
 	d.handler.SetInvoker(invoker)
 }
 
 // Start begins listening for inbound requests from stdin.
 func (d *StdioMCPDriver) Start(ctx context.Context) error {
-	d.mu.Lock()
-	if d.started {
-		d.mu.Unlock()
-		return fmt.Errorf("driver already started")
+	// Validate and mark as started
+	if err := d.MarkStarted(); err != nil {
+		return err
 	}
 
-	if d.handler.invoker == nil {
-		d.mu.Unlock()
-		return fmt.Errorf("invoker not set")
+	if err := d.ValidateInvoker(); err != nil {
+		d.MarkStopped()
+		return err
 	}
 
-	d.started = true
-	d.mu.Unlock()
+	d.Logger().Info("Stdio MCP server started, listening on stdin/stdout")
 
 	// Line-based JSON-RPC I/O loop
 	scanner := bufio.NewScanner(d.reader)
@@ -81,7 +69,7 @@ func (d *StdioMCPDriver) Start(ctx context.Context) error {
 			if !scanner.Scan() {
 				// EOF or error
 				if err := scanner.Err(); err != nil {
-					fmt.Fprintf(os.Stderr, "Scanner error: %v\n", err)
+					d.Logger().Error("Scanner error: %v", err)
 				}
 				close(d.done)
 				return scanner.Err()
@@ -99,12 +87,11 @@ func (d *StdioMCPDriver) Start(ctx context.Context) error {
 
 // Stop gracefully shuts down the driver.
 func (d *StdioMCPDriver) Stop(ctx context.Context) error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	if !d.started {
+	if !d.IsStarted() {
 		return nil
 	}
+
+	d.Logger().Info("Stopping stdio MCP server")
 
 	// Wait for processing to complete or context to cancel
 	select {
@@ -113,24 +100,24 @@ func (d *StdioMCPDriver) Stop(ctx context.Context) error {
 		return ctx.Err()
 	}
 
-	d.started = false
+	d.MarkStopped()
 	return nil
 }
 
 // handleLine processes a single line of JSON-RPC input.
 func (d *StdioMCPDriver) handleLine(ctx context.Context, line string) {
 	// Debug logging
-	fmt.Fprintf(os.Stderr, "[STDIO-MCP] Received: %s\n", line)
+	d.Logger().Debug("Received: %s", line)
 
 	// Parse MCP request
 	var mcpReq MCPRequest
 	if err := json.Unmarshal([]byte(line), &mcpReq); err != nil {
-		fmt.Fprintf(os.Stderr, "[STDIO-MCP] Parse error: %v\n", err)
+		d.Logger().Error("Parse error: %v", err)
 		d.sendError("", -32700, "Parse error", err.Error())
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "[STDIO-MCP] Method: %s, ID: %s\n", mcpReq.Method, mcpReq.ID)
+	d.Logger().Debug("Method: %s, ID: %s", mcpReq.Method, mcpReq.ID)
 
 	// Prepare authentication payload
 	// For stdio, we support authentication via environment variables
@@ -166,14 +153,12 @@ func (d *StdioMCPDriver) handleLine(ctx context.Context, line string) {
 func (d *StdioMCPDriver) sendResponse(resp *MCPResponse) {
 	respJSON, err := json.Marshal(resp)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[STDIO-MCP] Failed to marshal response: %v\n", err)
+		d.Logger().Error("Failed to marshal response: %v", err)
 		return
 	}
 
-	d.mu.Lock()
-	defer d.mu.Unlock()
 
-	fmt.Fprintf(os.Stderr, "[STDIO-MCP] Sending: %s\n", string(respJSON))
+	d.Logger().Debug("Sending: %s", string(respJSON))
 	fmt.Fprintf(d.writer, "%s\n", string(respJSON))
 }
 
@@ -209,10 +194,8 @@ func (d *StdioMCPDriver) SendNotification(method string, params map[string]inter
 		return fmt.Errorf("failed to marshal notification: %w", err)
 	}
 
-	d.mu.Lock()
-	defer d.mu.Unlock()
 
-	fmt.Fprintf(os.Stderr, "[STDIO-MCP] Sending notification: %s\n", string(notifJSON))
+	d.Logger().Debug("Sending notification: %s", string(notifJSON))
 	fmt.Fprintf(d.writer, "%s\n", string(notifJSON))
 
 	return nil
@@ -227,8 +210,8 @@ func (d *StdioMCPDriver) NotifyToolsChanged() error {
 // OnPackageChanged implements the PackageChangeListener interface.
 // Called when packages are installed or uninstalled.
 func (d *StdioMCPDriver) OnPackageChanged() {
-	fmt.Fprintf(os.Stderr, "[STDIO-MCP] Package changed, notifying client\n")
+	d.Logger().Info("Package changed, notifying client")
 	if err := d.NotifyToolsChanged(); err != nil {
-		fmt.Fprintf(os.Stderr, "[STDIO-MCP] Failed to send tool change notification: %v\n", err)
+		d.Logger().Error("Failed to send tool change notification: %v", err)
 	}
 }

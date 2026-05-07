@@ -44,9 +44,9 @@ func TestStdioMCPDriver_SetInvoker(t *testing.T) {
 
 	driver.SetInvoker(invoker)
 
-	driver.mu.RLock()
+	
 	assert.Equal(t, invoker, driver.handler.invoker)
-	driver.mu.RUnlock()
+	
 }
 
 func TestStdioMCPDriver_ToolsCall_Success(t *testing.T) {
