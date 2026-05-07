@@ -25,6 +25,10 @@ type kernel struct {
 	telemetry      types.RuntimeTelemetry
 	auditDrivers   []types.AuditDriver
 
+	// Driver policy management
+	policyRegistry types.DriverPolicyRegistry
+	driverCounts   map[string]int // driver class -> count
+
 	// State
 	started bool
 	ctx     context.Context
@@ -33,6 +37,10 @@ type kernel struct {
 
 // New creates a new kernel instance.
 func New() types.Kernel {
+	driverCounts := make(map[string]int)
+	// The internal resource bus counts as the io.bus driver
+	driverCounts["io.bus"] = 1
+
 	return &kernel{
 		requestDrivers: make([]types.RequestDriver, 0),
 		resourceBus: bus.New(&bus.Config{
@@ -41,7 +49,9 @@ func New() types.Kernel {
 				Writer: os.Stderr,
 			},
 		}),
-		authnDrivers: make([]types.SecurityAuthn, 0),
+		authnDrivers:   make([]types.SecurityAuthn, 0),
+		policyRegistry: NewDriverPolicyRegistry(),
+		driverCounts:   driverCounts,
 	}
 }
 
@@ -65,6 +75,16 @@ func (k *kernel) RegisterRequestDriver(driver types.RequestDriver) error {
 		}
 	}
 
+	// Track driver count by class
+	driverClass := extractDriverClass(driver.Name())
+	k.driverCounts[driverClass]++
+
+	// Validate cardinality policy (before adding)
+	if err := k.policyRegistry.ValidateDriverCount(driverClass, k.driverCounts[driverClass]); err != nil {
+		k.driverCounts[driverClass]-- // Rollback
+		return fmt.Errorf("policy violation: %w", err)
+	}
+
 	k.requestDrivers = append(k.requestDrivers, driver)
 	return nil
 }
@@ -80,6 +100,16 @@ func (k *kernel) RegisterResourceDriver(driver types.ResourceDriver) error {
 
 	if driver == nil {
 		return fmt.Errorf("driver cannot be nil")
+	}
+
+	// Track driver count by class
+	driverClass := extractDriverClass(driver.Name())
+	k.driverCounts[driverClass]++
+
+	// Validate cardinality policy (before adding)
+	if err := k.policyRegistry.ValidateDriverCount(driverClass, k.driverCounts[driverClass]); err != nil {
+		k.driverCounts[driverClass]-- // Rollback
+		return fmt.Errorf("policy violation: %w", err)
 	}
 
 	return k.resourceBus.RegisterDriver(driver)
@@ -127,6 +157,7 @@ func (k *kernel) SetSecurityAuthz(authz types.SecurityAuthz) error {
 	}
 
 	k.authz = authz
+	k.driverCounts["kernel.security.authz"] = 1
 	return nil
 }
 
@@ -148,6 +179,7 @@ func (k *kernel) SetPackageManager(pkg types.PackageManager) error {
 	}
 
 	k.pkg = pkg
+	k.driverCounts["kernel.pkg"] = 1
 	return nil
 }
 
@@ -169,6 +201,7 @@ func (k *kernel) SetRuntimeExec(exec types.RuntimeExec) error {
 	}
 
 	k.runtimeExec = exec
+	k.driverCounts["kernel.runtime.exec"] = 1
 	return nil
 }
 
@@ -242,6 +275,15 @@ func (k *kernel) Start(ctx context.Context) error {
 	}
 	if len(k.requestDrivers) == 0 {
 		return fmt.Errorf("no request drivers registered")
+	}
+
+	// Validate driver class policies
+	requiredClasses := k.policyRegistry.GetRequiredClasses()
+	for _, class := range requiredClasses {
+		count := k.driverCounts[class]
+		if err := k.policyRegistry.ValidateDriverCount(class, count); err != nil {
+			return fmt.Errorf("startup validation failed: %w", err)
+		}
 	}
 
 	// Create cancellable context
