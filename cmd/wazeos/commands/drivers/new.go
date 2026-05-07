@@ -176,6 +176,26 @@ import (
 	"github.com/wazeos/wazeos/sdk/driver"
 )
 
+// Input defines the configuration/operation parameters for this driver.
+// The build command will automatically generate JSON Schema from these struct tags.
+//
+// Supported struct tags:
+//   json:"name,omitempty"         - Field name and optionality
+//   description:"text"            - Field description
+//   default:"value"               - Default value
+//   enum:"a,b,c"                  - Allowed values (comma-separated)
+//   min:"1" / max:"100"           - Numeric constraints (for int/float)
+//   minLength:"1" / maxLength:"255" - String length constraints
+//   pattern:"^[a-z]+$"            - Regex pattern (for strings)
+//   example:"sample"              - Example value
+//
+// Example Input struct (uncomment to use):
+// type Input struct {
+//     Operation string ` + "`" + `json:"operation" description:"Operation to perform" enum:"read,write,delete"` + "`" + `
+//     Path      string ` + "`" + `json:"path" description:"Resource path" minLength:"1"` + "`" + `
+//     Timeout   int    ` + "`" + `json:"timeout,omitempty" description:"Timeout in seconds" default:"30" min:"1" max:"300"` + "`" + `
+// }
+
 // Driver implements the ResourceHandler interface.
 type Driver struct{}
 

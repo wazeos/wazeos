@@ -158,7 +158,23 @@ import (
 )
 
 // Input defines the tool's input parameters.
-// The schema is automatically extracted from this struct during build.
+// The build command will automatically generate JSON Schema from these struct tags.
+//
+// Supported struct tags:
+//   json:"name,omitempty"         - Field name and optionality
+//   description:"text"            - Field description
+//   default:"value"               - Default value
+//   enum:"a,b,c"                  - Allowed values (comma-separated)
+//   min:"1" / max:"100"           - Numeric constraints (for int/float)
+//   minLength:"1" / maxLength:"255" - String length constraints
+//   pattern:"^[a-z]+$"            - Regex pattern (for strings)
+//   example:"sample"              - Example value
+//
+// Example fields:
+//   Name  string ` + "`" + `json:"name" description:"User name" minLength:"1" maxLength:"50"` + "`" + `
+//   Age   int    ` + "`" + `json:"age,omitempty" description:"User age" min:"0" max:"150" default:"0"` + "`" + `
+//   Email string ` + "`" + `json:"email" description:"Email address" pattern:"^[^@]+@[^@]+\\.[^@]+$"` + "`" + `
+//   Role  string ` + "`" + `json:"role,omitempty" description:"User role" enum:"admin,user,guest" default:"guest"` + "`" + `
 type Input struct {
 	Message string ` + "`json:\"message\" description:\"Message to echo back\" example:\"World\"`" + `
 }
