@@ -248,21 +248,29 @@ type PermissionDefinitionMetadata struct {
 	Bit         uint64 `json:"bit"`
 }
 
+// PackageDependencies groups dependencies by type (apps vs drivers).
+type PackageDependencies struct {
+	Apps    map[string]string `json:"apps,omitempty"`    // app name -> version (e.g., "wazeos/logger": "1.0.0")
+	Drivers map[string]string `json:"drivers,omitempty"` // driver name -> version (e.g., "wazeos/file": "2.0.0")
+}
+
 // AppMetadata represents parsed metadata from an app package.
 type AppMetadata struct {
-	Name          string                          `json:"name"`
-	Version       string                          `json:"version"`
-	Author        string                          `json:"author"`
-	Description   string                          `json:"description,omitempty"`
-	Type          string                          `json:"type,omitempty"`          // "app" or "driver" (default: "app")
-	DriverClass   string                          `json:"driverClass,omitempty"`   // Driver class if type="driver"
-	URIPatterns   []string                        `json:"uriPatterns,omitempty"`   // URI patterns this driver handles (e.g., ["file://*/*"])
-	Dependencies  []string                        `json:"dependencies,omitempty"`  // Required packages (apps or drivers) specified as "author/name:version"
-	Entrypoint    string                          `json:"entrypoint,omitempty"`    // Wasm entrypoint (default: "_start")
-	Prerequisites []string                        `json:"prerequisites,omitempty"` // Packages (apps or drivers) auto-installed before this package
-	Privileges    *DriverPrivileges               `json:"privileges,omitempty"`    // System privileges for drivers (wazero capabilities)
-	Permissions   []PermissionDefinitionMetadata  `json:"permissions,omitempty"`   // Access control permissions exposed by drivers
-	InputSchema   *json.RawMessage                `json:"inputSchema,omitempty"`   // MCP tool schema (JSON Schema format)
+	Name               string                          `json:"name"`
+	Version            string                          `json:"version"`
+	Author             string                          `json:"author"`
+	Description        string                          `json:"description,omitempty"`
+	Type               string                          `json:"type,omitempty"`               // "app" or "driver" (default: "app")
+	DriverClass        string                          `json:"driverClass,omitempty"`        // Driver class if type="driver"
+	URIPatterns        []string                        `json:"uriPatterns,omitempty"`        // URI patterns this driver handles (e.g., ["file://*/*"])
+	Dependencies       []string                        `json:"dependencies,omitempty"`       // DEPRECATED: Legacy flat format, use DependenciesV2
+	DependenciesV2     *PackageDependencies            `json:"dependenciesV2,omitempty"`     // Structured dependencies (apps and drivers separated)
+	Entrypoint         string                          `json:"entrypoint,omitempty"`         // Wasm entrypoint (default: "_start")
+	Prerequisites      []string                        `json:"prerequisites,omitempty"`      // DEPRECATED: Legacy flat format, use PrerequisitesV2
+	PrerequisitesV2    *PackageDependencies            `json:"prerequisitesV2,omitempty"`    // Structured prerequisites (apps and drivers separated)
+	Privileges         *DriverPrivileges               `json:"privileges,omitempty"`         // System privileges for drivers (wazero capabilities)
+	Permissions        []PermissionDefinitionMetadata  `json:"permissions,omitempty"`        // Access control permissions exposed by drivers
+	InputSchema        *json.RawMessage                `json:"inputSchema,omitempty"`        // MCP tool schema (JSON Schema format)
 }
 
 // AppID returns the canonical app identifier.
@@ -281,6 +289,64 @@ func (m *AppMetadata) GetEntrypoint() string {
 		return m.Entrypoint
 	}
 	return "_start"
+}
+
+// GetAllDependencies returns all dependencies as a flat list of package IDs.
+// Supports both legacy flat format and new structured format.
+func (m *AppMetadata) GetAllDependencies() []string {
+	// Use new format if available
+	if m.DependenciesV2 != nil {
+		var deps []string
+		for name, version := range m.DependenciesV2.Apps {
+			deps = append(deps, fmt.Sprintf("%s:%s", name, version))
+		}
+		for name, version := range m.DependenciesV2.Drivers {
+			deps = append(deps, fmt.Sprintf("%s:%s", name, version))
+		}
+		return deps
+	}
+	// Fall back to legacy format
+	return m.Dependencies
+}
+
+// GetAllPrerequisites returns all prerequisites as a flat list of package IDs.
+// Supports both legacy flat format and new structured format.
+func (m *AppMetadata) GetAllPrerequisites() []string {
+	// Use new format if available
+	if m.PrerequisitesV2 != nil {
+		var prereqs []string
+		for name, version := range m.PrerequisitesV2.Apps {
+			prereqs = append(prereqs, fmt.Sprintf("%s:%s", name, version))
+		}
+		for name, version := range m.PrerequisitesV2.Drivers {
+			prereqs = append(prereqs, fmt.Sprintf("%s:%s", name, version))
+		}
+		return prereqs
+	}
+	// Fall back to legacy format
+	return m.Prerequisites
+}
+
+// GetDependencyType returns the type of a dependency ("app" or "driver") if using structured format.
+// Returns empty string if using legacy format or if not found.
+func (m *AppMetadata) GetDependencyType(packageName string) string {
+	if m.DependenciesV2 != nil {
+		if _, exists := m.DependenciesV2.Apps[packageName]; exists {
+			return "app"
+		}
+		if _, exists := m.DependenciesV2.Drivers[packageName]; exists {
+			return "driver"
+		}
+	}
+	if m.PrerequisitesV2 != nil {
+		if _, exists := m.PrerequisitesV2.Apps[packageName]; exists {
+			return "app"
+		}
+		if _, exists := m.PrerequisitesV2.Drivers[packageName]; exists {
+			return "driver"
+		}
+	}
+	return ""
 }
 
 // HasPermission checks if a host function is allowed.

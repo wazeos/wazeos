@@ -231,6 +231,14 @@ func generateDriverMetadata(author, driverName, description, driverClass string,
   "driverClass": "%s",
   "uriPatterns": %s,
   "entrypoint": "_start",
+  "prerequisitesV2": {
+    "apps": {},
+    "drivers": {}
+  },
+  "dependenciesV2": {
+    "apps": {},
+    "drivers": {}
+  },
   "privileges": {
     "wazero": {},
     "hostFunctions": []
@@ -381,7 +389,25 @@ echo '{"method":"GET","uri":"test://example"}' | ./app.wasm
 
 ### Metadata Structure
 
-The `+"`metadata.json`"+` file contains two distinct concepts:
+The `+"`metadata.json`"+` file contains several key sections:
+
+**Prerequisites & Dependencies** - Required packages (apps or drivers):
+- `+"`prerequisitesV2`"+` - Auto-installed before this package
+- `+"`dependenciesV2`"+` - Must be manually installed first
+- Both are structured with separate `+"`apps`"+` and `+"`drivers`"+` sections
+- Format: `+"`\"author/package\": \"version\"`"+`
+
+Example:
+`+"```json"+`
+"prerequisitesV2": {
+  "apps": {
+    "wazeos/logger": "1.0.0"
+  },
+  "drivers": {
+    "wazeos/file": "2.0.0"
+  }
+}
+`+"```"+`
 
 **Privileges** - System capabilities the driver requests FROM wazero:
 - `+"`wazero`"+` - Wazero-specific capabilities (network, filesystem, etc.)

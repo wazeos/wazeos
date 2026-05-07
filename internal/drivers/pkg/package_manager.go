@@ -211,12 +211,12 @@ func (pm *PackageManager) Install(ctx context.Context, zipData []byte) (*types.A
 	}
 
 	// Install prerequisites recursively if any are missing
-	if err := pm.installPrerequisites(ctx, metadata.Prerequisites, make(map[string]bool)); err != nil {
+	if err := pm.installPrerequisites(ctx, metadata.GetAllPrerequisites(), make(map[string]bool)); err != nil {
 		return nil, fmt.Errorf("failed to install prerequisites: %w", err)
 	}
 
 	// Check dependencies
-	for _, depID := range metadata.Dependencies {
+	for _, depID := range metadata.GetAllDependencies() {
 		pm.mu.RLock()
 		_, depExists := pm.apps[depID]
 		pm.mu.RUnlock()
@@ -605,8 +605,8 @@ func (pm *PackageManager) Uninstall(ctx context.Context, appID string) error {
 
 	// Collect this package's dependencies/prerequisites for later cleanup
 	var depsAndPrereqs []string
-	depsAndPrereqs = append(depsAndPrereqs, metadata.Dependencies...)
-	depsAndPrereqs = append(depsAndPrereqs, metadata.Prerequisites...)
+	depsAndPrereqs = append(depsAndPrereqs, metadata.GetAllDependencies()...)
+	depsAndPrereqs = append(depsAndPrereqs, metadata.GetAllPrerequisites()...)
 
 	// Unload from runtime
 	if pm.runtime != nil {
@@ -649,16 +649,16 @@ func (pm *PackageManager) findDependents(targetID string) []string {
 			continue
 		}
 
-		// Check dependencies
-		for _, dep := range meta.Dependencies {
+		// Check dependencies (supports both old and new format)
+		for _, dep := range meta.GetAllDependencies() {
 			if dep == targetID {
 				dependents = append(dependents, id)
 				break
 			}
 		}
 
-		// Check prerequisites
-		for _, prereq := range meta.Prerequisites {
+		// Check prerequisites (supports both old and new format)
+		for _, prereq := range meta.GetAllPrerequisites() {
 			if prereq == targetID {
 				dependents = append(dependents, id)
 				break
@@ -738,15 +738,15 @@ func (pm *PackageManager) isPackageUsed(targetID string) bool {
 	defer pm.mu.RUnlock()
 
 	for _, meta := range pm.apps {
-		// Check dependencies
-		for _, dep := range meta.Dependencies {
+		// Check dependencies (supports both old and new format)
+		for _, dep := range meta.GetAllDependencies() {
 			if dep == targetID {
 				return true
 			}
 		}
 
-		// Check prerequisites
-		for _, prereq := range meta.Prerequisites {
+		// Check prerequisites (supports both old and new format)
+		for _, prereq := range meta.GetAllPrerequisites() {
 			if prereq == targetID {
 				return true
 			}
