@@ -32,7 +32,7 @@ func NewFnDriver(pkgManager types.PackageManager, maxDepth int) *FnDriver {
 
 // Name returns the driver class.
 func (f *FnDriver) Name() string {
-	return "io.resource.fn"
+	return "io.resource"
 }
 
 // Patterns returns URI patterns this driver handles.

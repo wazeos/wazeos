@@ -25,7 +25,7 @@ func NewNativeS3Driver() *NativeS3Driver {
 
 // Name returns the driver name
 func (d *NativeS3Driver) Name() string {
-	return "io.resource.s3"
+	return "io.resource"
 }
 
 // Patterns returns URI patterns this driver handles
