@@ -257,9 +257,9 @@ type AppMetadata struct {
 	Type          string                          `json:"type,omitempty"`          // "app" or "driver" (default: "app")
 	DriverClass   string                          `json:"driverClass,omitempty"`   // Driver class if type="driver"
 	URIPatterns   []string                        `json:"uriPatterns,omitempty"`   // URI patterns this driver handles (e.g., ["file://*/*"])
-	Dependencies  []string                        `json:"dependencies,omitempty"`
+	Dependencies  []string                        `json:"dependencies,omitempty"`  // Required packages (apps or drivers) specified as "author/name:version"
 	Entrypoint    string                          `json:"entrypoint,omitempty"`    // Wasm entrypoint (default: "_start")
-	Prerequisites []string                        `json:"prerequisites,omitempty"` // Apps that must be installed
+	Prerequisites []string                        `json:"prerequisites,omitempty"` // Packages (apps or drivers) auto-installed before this package
 	Privileges    *DriverPrivileges               `json:"privileges,omitempty"`    // System privileges for drivers (wazero capabilities)
 	Permissions   []PermissionDefinitionMetadata  `json:"permissions,omitempty"`   // Access control permissions exposed by drivers
 	InputSchema   *json.RawMessage                `json:"inputSchema,omitempty"`   // MCP tool schema (JSON Schema format)

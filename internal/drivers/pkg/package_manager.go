@@ -26,14 +26,15 @@ type PackageChangeListener interface {
 	OnPackageChanged()
 }
 
-// PackageManager implements types.PackageManager for app lifecycle management.
+// PackageManager implements types.PackageManager for app and driver lifecycle management.
+// Both apps and drivers are stored together and can depend on each other.
 type PackageManager struct {
 	mu          sync.RWMutex
 	dataPath    string                          // Base data directory (e.g., ./data)
 	appsPath    string                          // Apps directory (e.g., ./data/apps)
 	driversPath string                          // Drivers directory (e.g., ./data/drivers)
-	apps        map[string]*types.AppMetadata   // appID -> metadata
-	wasmData    map[string][]byte               // appID -> wasm binary
+	apps        map[string]*types.AppMetadata   // appID -> metadata (includes both apps and drivers)
+	wasmData    map[string][]byte               // appID -> wasm binary (includes both apps and drivers)
 	runtime     types.RuntimeExec               // Runtime for loading apps
 	watcher     *fsnotify.Watcher               // File system watcher for hot-reload
 	stopChan    chan struct{}                   // Signal to stop watching
@@ -290,7 +291,17 @@ func (pm *PackageManager) Install(ctx context.Context, zipData []byte) (*types.A
 }
 
 // installPrerequisites recursively installs missing prerequisites.
+// Prerequisites can be either apps or drivers - the system automatically detects the type.
 // The installing map tracks packages currently being installed to detect circular dependencies.
+//
+// Example metadata showing an app depending on both another app and a driver:
+//   {
+//     "name": "myapp",
+//     "prerequisites": [
+//       "wazeos/logger:1.0.0",      // An app for logging
+//       "wazeos/s3-driver:2.0.0"    // A driver for S3 access
+//     ]
+//   }
 func (pm *PackageManager) installPrerequisites(ctx context.Context, prerequisites []string, installing map[string]bool) error {
 	for _, prereqID := range prerequisites {
 		// Check if prerequisite is already installed
@@ -347,9 +358,10 @@ func (pm *PackageManager) installFromPackageID(ctx context.Context, packageID st
 }
 
 // resolvePackageURL converts a package ID to a download URL.
+// Automatically detects whether the package is an app or driver by checking both repositories.
 // Supports formats:
-//   - "author/name:version" -> GitHub packages URL
-//   - "author/name" -> Latest version from GitHub packages
+//   - "author/name:version" -> GitHub packages URL (checks both apps/ and drivers/)
+//   - "author/name" -> Latest version from GitHub packages (tries apps first, then drivers)
 func (pm *PackageManager) resolvePackageURL(packageID string) (string, error) {
 	// Parse author/package:version format
 	parts := strings.SplitN(packageID, ":", 2)
