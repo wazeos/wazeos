@@ -96,7 +96,7 @@ func (f *FnDriver) HandleCall(ctx context.Context, call *types.ResourceCall) (*t
 
 	// Create child execution context with intersected permissions
 	childRequestID := fmt.Sprintf("%s.%s", call.Context.RequestID, appName)
-	childCtx := call.Context.ChildContext(childRequestID, targetPermissions)
+	childCtx := call.Context.ChildContext(childRequestID, appID, targetPermissions)
 
 	// Track call depth
 	f.incrementCallDepth(call.Context.TraceID, childRequestID)
@@ -153,19 +153,12 @@ func (f *FnDriver) decrementCallDepth(traceID, requestID string) {
 }
 
 // hasCycle checks if the app is already in the current call chain.
+// This prevents infinite recursion cycles like A->B->A or A->B->C->A.
 func (f *FnDriver) hasCycle(execCtx *types.ExecutionContext, targetAppID string) bool {
-	// For MVP, simple cycle detection: check if we're calling the same app
-	// In full implementation, would track full call chain in context
-	// For now, we'll just prevent immediate recursion (A calls A)
-	if execCtx.ParentRequestID != nil {
-		// Extract app name from parent request ID
-		// Format is "req-1.app1.app2" - last segment is app name
-		parts := strings.Split(*execCtx.ParentRequestID, ".")
-		if len(parts) > 1 {
-			parentApp := parts[len(parts)-1]
-			if strings.Contains(targetAppID, parentApp) {
-				return true
-			}
+	// Check if targetAppID is already in the call chain
+	for _, appID := range execCtx.CallChain {
+		if appID == targetAppID {
+			return true
 		}
 	}
 	return false

@@ -63,10 +63,17 @@ func TestEndToEnd_WASMDriver_FileRead(t *testing.T) {
 		t.Fatalf("Failed to compile file driver: %v", err)
 	}
 
-	// Create WASM driver wrapper
+	// Create WASM driver wrapper with metadata
+	fileDriverMetadata := &types.AppMetadata{
+		Name:        "file",
+		Author:      "test",
+		Version:     "1.0.0",
+		Type:        "driver",
+		DriverClass: "io.resource",
+		URIPatterns: []string{"file://*/*"},
+	}
 	fileDriver := runtime.NewWasmResourceDriver(
-		"io.resource",
-		[]string{"file://*/*"},
+		fileDriverMetadata,
 		runtimeExec,
 		compiled,
 	)

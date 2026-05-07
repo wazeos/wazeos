@@ -16,18 +16,16 @@ import (
 // WasmResourceDriver wraps a WASM driver module and implements types.ResourceDriver.
 // It communicates with the WASM driver via stdin/stdout JSON protocol.
 type WasmResourceDriver struct {
-	name           string
-	patterns       []string
+	metadata       *types.AppMetadata
 	runtime        *RuntimeExec
 	compiledModule wazero.CompiledModule
 	timeout        time.Duration
 }
 
 // NewWasmResourceDriver creates a new WASM resource driver wrapper.
-func NewWasmResourceDriver(name string, patterns []string, runtime *RuntimeExec, compiled wazero.CompiledModule) *WasmResourceDriver {
+func NewWasmResourceDriver(metadata *types.AppMetadata, runtime *RuntimeExec, compiled wazero.CompiledModule) *WasmResourceDriver {
 	return &WasmResourceDriver{
-		name:           name,
-		patterns:       patterns,
+		metadata:       metadata,
 		runtime:        runtime,
 		compiledModule: compiled,
 		timeout:        30 * time.Second,
@@ -36,12 +34,17 @@ func NewWasmResourceDriver(name string, patterns []string, runtime *RuntimeExec,
 
 // Name returns the driver name in author/name format.
 func (w *WasmResourceDriver) Name() string {
-	return w.name
+	return fmt.Sprintf("%s/%s", w.metadata.Author, w.metadata.Name)
 }
 
 // Patterns returns URI patterns this driver handles.
 func (w *WasmResourceDriver) Patterns() []string {
-	return w.patterns
+	return w.metadata.URIPatterns
+}
+
+// Metadata returns the full application metadata.
+func (w *WasmResourceDriver) Metadata() *types.AppMetadata {
+	return w.metadata
 }
 
 // HandleCall invokes the WASM driver with the given resource call.
@@ -69,7 +72,7 @@ func (w *WasmResourceDriver) HandleCall(ctx context.Context, call *types.Resourc
 		WithStdin(stdin).
 		WithStdout(&stdout).
 		WithStderr(&stderr).
-		WithName(w.name).
+		WithName(w.Name()).
 		WithFSConfig(wazero.NewFSConfig().
 			WithDirMount("/", "/").           // Mount root filesystem
 			WithDirMount("/tmp", "/tmp"))     // Mount /tmp explicitly
@@ -129,16 +132,16 @@ func (w *WasmResourceDriver) HandleCall(ctx context.Context, call *types.Resourc
 
 // WasmAuthDriver wraps a WASM authentication driver module and implements types.SecurityAuthn.
 type WasmAuthDriver struct {
-	name           string
+	metadata       *types.AppMetadata
 	runtime        *RuntimeExec
 	compiledModule wazero.CompiledModule
 	timeout        time.Duration
 }
 
 // NewWasmAuthDriver creates a new WASM authentication driver wrapper.
-func NewWasmAuthDriver(name string, runtime *RuntimeExec, compiled wazero.CompiledModule) *WasmAuthDriver {
+func NewWasmAuthDriver(metadata *types.AppMetadata, runtime *RuntimeExec, compiled wazero.CompiledModule) *WasmAuthDriver {
 	return &WasmAuthDriver{
-		name:           name,
+		metadata:       metadata,
 		runtime:        runtime,
 		compiledModule: compiled,
 		timeout:        10 * time.Second,
@@ -147,7 +150,12 @@ func NewWasmAuthDriver(name string, runtime *RuntimeExec, compiled wazero.Compil
 
 // Name returns the driver name in author/name format.
 func (w *WasmAuthDriver) Name() string {
-	return w.name
+	return fmt.Sprintf("%s/%s", w.metadata.Author, w.metadata.Name)
+}
+
+// Metadata returns the full application metadata.
+func (w *WasmAuthDriver) Metadata() *types.AppMetadata {
+	return w.metadata
 }
 
 // Authenticate invokes the WASM auth driver with the given payload.
@@ -175,7 +183,7 @@ func (w *WasmAuthDriver) Authenticate(ctx context.Context, payload *types.AuthPa
 		WithStdin(stdin).
 		WithStdout(&stdout).
 		WithStderr(&stderr).
-		WithName(w.name)
+		WithName(w.Name())
 
 	// Instantiate and run the module
 	module, err := w.runtime.runtime.InstantiateModule(execCtx, w.compiledModule, moduleConfig)
@@ -254,13 +262,9 @@ func LoadInstalledResourceDrivers(ctx context.Context, pkgMgr types.PackageManag
 			return nil, fmt.Errorf("failed to compile driver for patterns %v: %w", metadata.URIPatterns, err)
 		}
 
-		// Construct driver name in author/name format
-		driverName := fmt.Sprintf("%s/%s", metadata.Author, metadata.Name)
-
-		// Create WASM resource driver wrapper
+		// Create WASM resource driver wrapper with full metadata
 		driver := NewWasmResourceDriver(
-			driverName,
-			metadata.URIPatterns,
+			metadata,
 			runtime,
 			compiled,
 		)

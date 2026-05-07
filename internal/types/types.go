@@ -242,6 +242,7 @@ type ExecutionContext struct {
 	PermissionContext *PermissionContext // Resolved permissions for this call chain
 	Timestamp         time.Time         // Request timestamp
 	Metadata          map[string]string // Additional context (e.g., headers, environment)
+	CallChain         []string          // Chain of app IDs that have been invoked (for cycle detection)
 }
 
 // NewExecutionContext creates a new execution context for a top-level request.
@@ -254,12 +255,20 @@ func NewExecutionContext(requestID, traceID, principal string, permissions *Perm
 		PermissionContext: permissions,
 		Timestamp:         time.Now(),
 		Metadata:          make(map[string]string),
+		CallChain:         make([]string, 0), // Initialize empty call chain
 	}
 }
 
 // ChildContext creates a child execution context for a nested fn:// call.
-func (ec *ExecutionContext) ChildContext(newRequestID string, newPermissions *PermissionContext) *ExecutionContext {
+// The appID parameter is the ID of the app being invoked and will be added to the call chain.
+func (ec *ExecutionContext) ChildContext(newRequestID string, appID string, newPermissions *PermissionContext) *ExecutionContext {
 	parentID := ec.RequestID
+
+	// Copy and extend the call chain with the new app
+	newChain := make([]string, len(ec.CallChain)+1)
+	copy(newChain, ec.CallChain)
+	newChain[len(ec.CallChain)] = appID
+
 	return &ExecutionContext{
 		RequestID:         newRequestID,
 		ParentRequestID:   &parentID,
@@ -268,6 +277,7 @@ func (ec *ExecutionContext) ChildContext(newRequestID string, newPermissions *Pe
 		PermissionContext: ec.PermissionContext.Intersect(newPermissions),
 		Timestamp:         time.Now(),
 		Metadata:          make(map[string]string),
+		CallChain:         newChain,
 	}
 }
 

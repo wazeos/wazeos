@@ -346,7 +346,7 @@ func TestExecutionContext_ChildContext(t *testing.T) {
 	// Wait a tiny bit to ensure timestamp difference
 	time.Sleep(1 * time.Millisecond)
 
-	child := parent.ChildContext("req-124", childPermissions)
+	child := parent.ChildContext("req-124", "test/app:1.0.0", childPermissions)
 
 	// Check child properties
 	assert.Equal(t, "req-124", child.RequestID)
@@ -354,6 +354,10 @@ func TestExecutionContext_ChildContext(t *testing.T) {
 	assert.Equal(t, "user:alice", child.Principal)
 	require.NotNil(t, child.ParentRequestID)
 	assert.Equal(t, "req-123", *child.ParentRequestID)
+
+	// Check call chain
+	assert.Equal(t, 1, len(child.CallChain))
+	assert.Equal(t, "test/app:1.0.0", child.CallChain[0])
 
 	// Check permission intersection
 	assert.Equal(t, 1, len(child.PermissionContext.Entries))
