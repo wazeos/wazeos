@@ -572,6 +572,8 @@ func (pm *PackageManager) getPackagePath(metadata *types.AppMetadata) string {
 }
 
 // Uninstall removes an installed app.
+// If other packages depend on this app, the uninstall is aborted and a dependency tree is shown.
+// After successful uninstall, unused dependencies/prerequisites are automatically removed.
 func (pm *PackageManager) Uninstall(ctx context.Context, appID string) error {
 	pm.mu.RLock()
 	metadata, exists := pm.apps[appID]
@@ -581,20 +583,18 @@ func (pm *PackageManager) Uninstall(ctx context.Context, appID string) error {
 		return types.ErrNotFound
 	}
 
-	// Check if any other apps depend on this one
-	pm.mu.RLock()
-	for id, meta := range pm.apps {
-		if id == appID {
-			continue
-		}
-		for _, dep := range meta.Dependencies {
-			if dep == appID {
-				pm.mu.RUnlock()
-				return fmt.Errorf("cannot uninstall: app %s depends on %s", id, appID)
-			}
-		}
+	// Check if any other packages depend on this one
+	dependents := pm.findDependents(appID)
+	if len(dependents) > 0 {
+		// Build and display dependency tree
+		tree := pm.buildDependencyTree(appID, dependents, 0)
+		return fmt.Errorf("cannot uninstall %s: other packages depend on it\n\nPackages that need to be uninstalled first:\n%s", appID, tree)
 	}
-	pm.mu.RUnlock()
+
+	// Collect this package's dependencies/prerequisites for later cleanup
+	var depsAndPrereqs []string
+	depsAndPrereqs = append(depsAndPrereqs, metadata.Dependencies...)
+	depsAndPrereqs = append(depsAndPrereqs, metadata.Prerequisites...)
 
 	// Unload from runtime
 	if pm.runtime != nil {
@@ -615,10 +615,133 @@ func (pm *PackageManager) Uninstall(ctx context.Context, appID string) error {
 		return fmt.Errorf("failed to remove package directory: %w", err)
 	}
 
+	fmt.Fprintf(os.Stderr, "✓ Uninstalled %s\n", appID)
+
+	// Clean up unused dependencies/prerequisites
+	pm.cleanupUnusedDependencies(ctx, depsAndPrereqs)
+
 	// Notify listeners of package change
 	pm.notifyListeners()
 
 	return nil
+}
+
+// findDependents returns all packages that depend on or have the given package as a prerequisite.
+func (pm *PackageManager) findDependents(targetID string) []string {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	var dependents []string
+	for id, meta := range pm.apps {
+		if id == targetID {
+			continue
+		}
+
+		// Check dependencies
+		for _, dep := range meta.Dependencies {
+			if dep == targetID {
+				dependents = append(dependents, id)
+				break
+			}
+		}
+
+		// Check prerequisites
+		for _, prereq := range meta.Prerequisites {
+			if prereq == targetID {
+				dependents = append(dependents, id)
+				break
+			}
+		}
+	}
+
+	return dependents
+}
+
+// buildDependencyTree builds a formatted dependency tree showing which packages depend on the target.
+func (pm *PackageManager) buildDependencyTree(targetID string, dependents []string, depth int) string {
+	indent := strings.Repeat("  ", depth)
+	var tree strings.Builder
+
+	for i, depID := range dependents {
+		isLast := i == len(dependents)-1
+		prefix := "├─"
+		if isLast {
+			prefix = "└─"
+		}
+
+		tree.WriteString(fmt.Sprintf("%s%s %s\n", indent, prefix, depID))
+
+		// Recursively show packages that depend on this dependent
+		subDependents := pm.findDependents(depID)
+		if len(subDependents) > 0 {
+			subIndent := "│ "
+			if isLast {
+				subIndent = "  "
+			}
+			subTree := pm.buildDependencyTree(depID, subDependents, depth+1)
+			lines := strings.Split(strings.TrimRight(subTree, "\n"), "\n")
+			for _, line := range lines {
+				tree.WriteString(fmt.Sprintf("%s%s%s\n", indent, subIndent, line))
+			}
+		}
+	}
+
+	return tree.String()
+}
+
+// cleanupUnusedDependencies removes dependencies/prerequisites that are no longer needed.
+func (pm *PackageManager) cleanupUnusedDependencies(ctx context.Context, candidates []string) {
+	for _, candidate := range candidates {
+		// Check if any other package uses this dependency
+		if pm.isPackageUsed(candidate) {
+			continue
+		}
+
+		// No other package uses it, safe to uninstall
+		pm.mu.RLock()
+		candidateMeta, exists := pm.apps[candidate]
+		pm.mu.RUnlock()
+
+		if !exists {
+			// Already uninstalled or never installed
+			continue
+		}
+
+		fmt.Fprintf(os.Stderr, "→ Removing unused dependency: %s\n", candidate)
+
+		// Recursively uninstall (this will clean up its dependencies too)
+		if err := pm.Uninstall(ctx, candidate); err != nil {
+			// Log error but continue
+			fmt.Fprintf(os.Stderr, "  Warning: failed to uninstall %s: %v\n", candidate, err)
+		}
+
+		// Note: Uninstall already prints "✓ Uninstalled" so we don't need to print it again
+		_ = candidateMeta // Silence unused variable warning
+	}
+}
+
+// isPackageUsed checks if any installed package depends on or has the target as a prerequisite.
+func (pm *PackageManager) isPackageUsed(targetID string) bool {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	for _, meta := range pm.apps {
+		// Check dependencies
+		for _, dep := range meta.Dependencies {
+			if dep == targetID {
+				return true
+			}
+		}
+
+		// Check prerequisites
+		for _, prereq := range meta.Prerequisites {
+			if prereq == targetID {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // List returns metadata for all installed apps.
