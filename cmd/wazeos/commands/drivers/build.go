@@ -110,6 +110,9 @@ func buildDriverWASM(inputFile, outputFile string) error {
 		"-target=wasi",
 		inputFile)
 
+	// Set working directory to the driver directory so go.mod is found
+	cmd.Dir = filepath.Dir(inputFile)
+
 	// Capture output
 	output, err := cmd.CombinedOutput()
 	if err != nil {

@@ -400,6 +400,9 @@ func buildWASM(inputFile, outputFile string) error {
 		"-target=wasi",
 		inputFile)
 
+	// Set working directory to the app directory so go.mod is found
+	cmd.Dir = filepath.Dir(inputFile)
+
 	// Capture output
 	output, err := cmd.CombinedOutput()
 	if err != nil {
