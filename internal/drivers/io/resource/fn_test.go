@@ -97,10 +97,10 @@ func TestFnDriver_SetInvoker(t *testing.T) {
 	driver := NewFnDriver(&mockPackageManager{}, 0)
 	invoker := &mockInvoker{}
 
-	assert.Nil(t, driver.invoker)
+	assert.Nil(t, driver.GetInvoker())
 
 	driver.SetInvoker(invoker)
-	assert.NotNil(t, driver.invoker)
+	assert.NotNil(t, driver.GetInvoker())
 }
 
 func TestFnDriver_HandleCall_Success(t *testing.T) {

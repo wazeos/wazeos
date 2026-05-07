@@ -6,12 +6,13 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/wazeos/wazeos/internal/drivers/base"
 	"github.com/wazeos/wazeos/internal/types"
 )
 
 // FnDriver implements types.ResourceDriver for fn:// URIs (inter-app calls).
 type FnDriver struct {
-	invoker       types.InvocationHandler
+	*base.BaseDriver
 	pkgManager    types.PackageManager
 	maxDepth      int
 	currentDepths map[string]int // track call depth per trace
@@ -23,26 +24,15 @@ func NewFnDriver(pkgManager types.PackageManager, maxDepth int) *FnDriver {
 		maxDepth = 10 // Default max call depth
 	}
 
+	config := base.DefaultConfig("wazeos/fn", "fn://*/*")
+	baseDriver := base.NewBaseDriver(config)
+
 	return &FnDriver{
+		BaseDriver:    baseDriver,
 		pkgManager:    pkgManager,
 		maxDepth:      maxDepth,
 		currentDepths: make(map[string]int),
 	}
-}
-
-// Name returns the driver name.
-func (f *FnDriver) Name() string {
-	return "wazeos/fn"
-}
-
-// Patterns returns URI patterns this driver handles.
-func (f *FnDriver) Patterns() []string {
-	return []string{"fn://*/*"}
-}
-
-// SetInvoker sets the invocation handler (called by kernel during setup).
-func (f *FnDriver) SetInvoker(invoker types.InvocationHandler) {
-	f.invoker = invoker
 }
 
 // HandleCall processes fn:// calls to execute other apps.
@@ -51,19 +41,20 @@ func (f *FnDriver) HandleCall(ctx context.Context, call *types.ResourceCall) (*t
 		return nil, types.ErrInvalidRequest
 	}
 
-	if f.invoker == nil {
-		return types.ErrorResult(500, "fn driver not initialized: invoker not set"), types.ErrInternal
+	invoker := f.GetInvoker()
+	if invoker == nil {
+		return base.InternalError("fn driver not initialized: invoker not set"), types.ErrInternal
 	}
 
 	// Parse fn:// URI: fn://app-name/arg1/arg2/arg3
 	parsed, err := url.Parse(call.URI)
 	if err != nil {
-		return types.ErrorResult(400, "invalid fn:// URI: %v", err), types.ErrInvalidRequest
+		return base.BadRequest("invalid fn:// URI: %v", err), types.ErrInvalidRequest
 	}
 
 	appName := parsed.Host
 	if appName == "" {
-		return types.ErrorResult(400, "fn:// URI must specify app name: fn://app-name/args"), types.ErrInvalidRequest
+		return base.BadRequest("fn:// URI must specify app name: fn://app-name/args"), types.ErrInvalidRequest
 	}
 
 	// Parse arguments from path
@@ -76,18 +67,18 @@ func (f *FnDriver) HandleCall(ctx context.Context, call *types.ResourceCall) (*t
 	// Resolve app name to full app ID
 	appID, err := f.pkgManager.Resolve(ctx, appName)
 	if err != nil {
-		return types.ErrorResult(404, "app not found: %s", appName), types.ErrNotFound
+		return base.NotFound("app not found: %s", appName), types.ErrNotFound
 	}
 
 	// Check call depth to prevent infinite recursion
 	depth := f.getCallDepth(call.Context.TraceID, call.Context.RequestID)
 	if depth >= f.maxDepth {
-		return types.ErrorResult(508, "maximum call depth %d exceeded", f.maxDepth), types.ErrMaxDepthExceeded
+		return base.ErrorResponse(508, "maximum call depth %d exceeded", f.maxDepth), types.ErrMaxDepthExceeded
 	}
 
 	// Detect cycles by checking parent chain
 	if f.hasCycle(call.Context, appID) {
-		return types.ErrorResult(508, "cycle detected: app %s already in call chain", appID), types.ErrCycleDetected
+		return base.ErrorResponse(508, "cycle detected: app %s already in call chain", appID), types.ErrCycleDetected
 	}
 
 	// Get target app permissions (for MVP, we'll just use caller's permissions intersected)
@@ -110,9 +101,9 @@ func (f *FnDriver) HandleCall(ctx context.Context, call *types.ResourceCall) (*t
 	}
 
 	// Execute the app
-	result, err := f.invoker.Invoke(ctx, invocationReq)
+	result, err := invoker.Invoke(ctx, invocationReq)
 	if err != nil {
-		return types.ErrorResult(500, "invocation failed: %v", err), err
+		return base.InternalError("invocation failed: %v", err), err
 	}
 
 	// Map invocation result to resource result
