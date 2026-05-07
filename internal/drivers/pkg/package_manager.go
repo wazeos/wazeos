@@ -7,8 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -206,6 +209,11 @@ func (pm *PackageManager) Install(ctx context.Context, zipData []byte) (*types.A
 		return nil, fmt.Errorf("app %s already installed: %w", appID, types.ErrAlreadyExists)
 	}
 
+	// Install prerequisites recursively if any are missing
+	if err := pm.installPrerequisites(ctx, metadata.Prerequisites, make(map[string]bool)); err != nil {
+		return nil, fmt.Errorf("failed to install prerequisites: %w", err)
+	}
+
 	// Check dependencies
 	for _, depID := range metadata.Dependencies {
 		pm.mu.RLock()
@@ -279,6 +287,279 @@ func (pm *PackageManager) Install(ctx context.Context, zipData []byte) (*types.A
 	pm.notifyListeners()
 
 	return metadata, nil
+}
+
+// installPrerequisites recursively installs missing prerequisites.
+// The installing map tracks packages currently being installed to detect circular dependencies.
+func (pm *PackageManager) installPrerequisites(ctx context.Context, prerequisites []string, installing map[string]bool) error {
+	for _, prereqID := range prerequisites {
+		// Check if prerequisite is already installed
+		pm.mu.RLock()
+		_, exists := pm.apps[prereqID]
+		pm.mu.RUnlock()
+
+		if exists {
+			// Already installed, skip
+			continue
+		}
+
+		// Check for circular dependency
+		if installing[prereqID] {
+			return fmt.Errorf("circular prerequisite dependency detected: %s", prereqID)
+		}
+
+		// Mark as installing
+		installing[prereqID] = true
+
+		// Download and install the prerequisite
+		fmt.Fprintf(os.Stderr, "→ Installing prerequisite: %s\n", prereqID)
+
+		if err := pm.installFromPackageID(ctx, prereqID, installing); err != nil {
+			return fmt.Errorf("failed to install prerequisite %s: %w", prereqID, err)
+		}
+
+		fmt.Fprintf(os.Stderr, "  ✓ Installed %s\n", prereqID)
+
+		// Unmark after successful installation
+		delete(installing, prereqID)
+	}
+
+	return nil
+}
+
+// installFromPackageID downloads and installs a package from its ID (e.g., "wazeos/echo:1.0.0").
+func (pm *PackageManager) installFromPackageID(ctx context.Context, packageID string, installing map[string]bool) error {
+	// Resolve package URL
+	url, err := pm.resolvePackageURL(packageID)
+	if err != nil {
+		return fmt.Errorf("failed to resolve package URL: %w", err)
+	}
+
+	// Download package
+	zipData, err := pm.downloadPackage(url)
+	if err != nil {
+		return fmt.Errorf("failed to download package: %w", err)
+	}
+
+	// Install package (this will recursively install its prerequisites)
+	_, err = pm.Install(ctx, zipData)
+	return err
+}
+
+// resolvePackageURL converts a package ID to a download URL.
+// Supports formats:
+//   - "author/name:version" -> GitHub packages URL
+//   - "author/name" -> Latest version from GitHub packages
+func (pm *PackageManager) resolvePackageURL(packageID string) (string, error) {
+	// Parse author/package:version format
+	parts := strings.SplitN(packageID, ":", 2)
+	nameAndAuthor := parts[0]
+	version := ""
+	if len(parts) == 2 {
+		version = parts[1]
+	}
+
+	// Split author/name
+	nameParts := strings.SplitN(nameAndAuthor, "/", 2)
+	if len(nameParts) != 2 {
+		return "", fmt.Errorf("invalid package ID format, expected author/name:version, got: %s", packageID)
+	}
+	author := nameParts[0]
+	name := nameParts[1]
+
+	// Determine if this is an app or driver by trying both
+	// Try apps first
+	if version == "" {
+		versions, err := pm.listVersions("apps", author, name)
+		if err == nil && len(versions) > 0 {
+			version = pm.findHighestVersion(versions)
+		} else {
+			// Try drivers
+			versions, err = pm.listVersions("drivers", author, name)
+			if err == nil && len(versions) > 0 {
+				version = pm.findHighestVersion(versions)
+			} else {
+				return "", fmt.Errorf("package not found: %s", packageID)
+			}
+		}
+	}
+
+	// Try apps URL first, then drivers
+	appsURL := fmt.Sprintf("https://github.com/wazeos/packages/raw/main/apps/%s/%s/%s.zip", author, name, version)
+	driversURL := fmt.Sprintf("https://github.com/wazeos/packages/raw/main/drivers/%s/%s/%s.zip", author, name, version)
+
+	// Check which one exists (try HEAD request)
+	if pm.urlExists(appsURL) {
+		return appsURL, nil
+	}
+	if pm.urlExists(driversURL) {
+		return driversURL, nil
+	}
+
+	// Default to apps URL if we can't determine
+	return appsURL, nil
+}
+
+// downloadPackage downloads a package from a URL and returns the ZIP data.
+func (pm *PackageManager) downloadPackage(url string) ([]byte, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("download failed with status: %d %s", resp.StatusCode, resp.Status)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	return data, nil
+}
+
+// urlExists checks if a URL returns 200 OK with a HEAD request.
+func (pm *PackageManager) urlExists(url string) bool {
+	resp, err := http.Head(url)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
+// listVersions lists available versions for a package type from GitHub.
+func (pm *PackageManager) listVersions(packageType, author, name string) ([]string, error) {
+	apiURL := fmt.Sprintf("https://api.github.com/repos/wazeos/packages/contents/%s/%s/%s", packageType, author, name)
+
+	resp, err := http.Get(apiURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var items []struct {
+		Name string `json:"name"`
+		Type string `json:"type"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+		return nil, err
+	}
+
+	var versions []string
+	for _, item := range items {
+		if item.Type == "file" && strings.HasSuffix(item.Name, ".zip") {
+			version := strings.TrimSuffix(item.Name, ".zip")
+			versions = append(versions, version)
+		}
+	}
+
+	return versions, nil
+}
+
+// findHighestVersion finds the highest semantic version from a list.
+func (pm *PackageManager) findHighestVersion(versions []string) string {
+	if len(versions) == 0 {
+		return "latest"
+	}
+
+	highest := versions[0]
+	highestSemVer := pm.parseSemVer(highest)
+
+	for _, v := range versions[1:] {
+		semVer := pm.parseSemVer(v)
+		if pm.compareSemVer(semVer, highestSemVer) > 0 {
+			highest = v
+			highestSemVer = semVer
+		}
+	}
+
+	return highest
+}
+
+type semVer struct {
+	major      int
+	minor      int
+	patch      int
+	prerelease string
+	original   string
+}
+
+func (pm *PackageManager) parseSemVer(v string) semVer {
+	sv := semVer{original: v}
+
+	if v == "latest" {
+		sv.major = 999999
+		return sv
+	}
+
+	v = strings.TrimPrefix(v, "v")
+
+	re := regexp.MustCompile(`^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-(.+))?$`)
+	matches := re.FindStringSubmatch(v)
+
+	if matches == nil {
+		return sv
+	}
+
+	sv.major, _ = strconv.Atoi(matches[1])
+	if matches[2] != "" {
+		sv.minor, _ = strconv.Atoi(matches[2])
+	}
+	if matches[3] != "" {
+		sv.patch, _ = strconv.Atoi(matches[3])
+	}
+	if matches[4] != "" {
+		sv.prerelease = matches[4]
+	}
+
+	return sv
+}
+
+func (pm *PackageManager) compareSemVer(a, b semVer) int {
+	if a.major != b.major {
+		if a.major > b.major {
+			return 1
+		}
+		return -1
+	}
+
+	if a.minor != b.minor {
+		if a.minor > b.minor {
+			return 1
+		}
+		return -1
+	}
+
+	if a.patch != b.patch {
+		if a.patch > b.patch {
+			return 1
+		}
+		return -1
+	}
+
+	if a.prerelease == "" && b.prerelease != "" {
+		return 1
+	}
+	if a.prerelease != "" && b.prerelease == "" {
+		return -1
+	}
+
+	if a.prerelease != b.prerelease {
+		if a.prerelease > b.prerelease {
+			return 1
+		}
+		return -1
+	}
+
+	return 0
 }
 
 // getPackagePath returns the filesystem path for a package based on its metadata.
