@@ -100,9 +100,9 @@ func runNew(cmd *cobra.Command, args []string) {
 	fmt.Printf("✓ Created new app project: %s\n\n", projectDir)
 	fmt.Println("Next steps:")
 	fmt.Printf("  cd %s\n", projectDir)
-	fmt.Println("  make build    # Build the WASM binary")
-	fmt.Println("  make package  # Create installable ZIP")
-	fmt.Println("  make install  # Install locally")
+	fmt.Println("  wazeos apps build .    # Build the WASM binary")
+	fmt.Println("  wazeos apps package .  # Create installable ZIP")
+	fmt.Println("  wazeos apps install .  # Build, package, and install")
 }
 
 func promptRequired(prompt string) string {
@@ -133,7 +133,6 @@ func generateProjectFiles(projectDir, author, appName, description string) error
 		"main.go":       generateMainGo(),
 		"metadata.json": generateMetadata(author, appName, description),
 		"go.mod":        generateGoMod(author, appName),
-		"Makefile":      generateMakefile(author, appName),
 		"README.md":     generateReadme(author, appName, description),
 		".gitignore":    generateGitignore(),
 	}
@@ -152,28 +151,37 @@ func generateMainGo() string {
 	return `package main
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/wazeos/wazeos/sdk/app"
 )
 
+// Input defines the tool's input parameters.
+// The schema is automatically extracted from this struct during build.
+type Input struct {
+	Message string ` + "`json:\"message\" description:\"Message to echo back\" example:\"World\"`" + `
+}
+
 // Tool implements the MCPToolHandler interface.
 type Tool struct{}
 
-// Handle processes the MCP tool invocation.
-// input: JSON object with parameters (matches inputSchema in metadata.json)
-// returns: JSON object to send back to the client
-func (t *Tool) Handle(ctx *app.Context, input map[string]interface{}) (map[string]interface{}, error) {
+// Handle processes the MCP tool invocation with typed input.
+func (t *Tool) Handle(ctx *app.Context, inputRaw map[string]interface{}) (map[string]interface{}, error) {
+	// Parse input into typed struct
+	var input Input
+	data, _ := json.Marshal(inputRaw)
+	if err := json.Unmarshal(data, &input); err != nil {
+		return nil, app.WrapError(err, "INVALID_INPUT", "Invalid input", 400)
+	}
+
 	// Log execution
-	ctx.Log.Info("tool invoked", app.Int("argCount", len(input)))
+	ctx.Log.Info("tool invoked", app.String("message", input.Message))
 
-	// Get input parameters (type-safe)
-	message, _ := input["message"].(string)
-
-	// Process the input
+	// Process the input with type safety!
 	greeting := "Hello from WazeOS!"
-	if message != "" {
-		greeting = fmt.Sprintf("Hello, %s!", message)
+	if input.Message != "" {
+		greeting = fmt.Sprintf("Hello, %s!", input.Message)
 	}
 
 	// Example: Use context for authentication, tracing, etc.
@@ -221,16 +229,7 @@ func generateMetadata(author, appName, description string) string {
   "author": "%s",
   "description": "%s",
   "type": "app",
-  "entrypoint": "_start",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "message": {
-        "type": "string",
-        "description": "Message to echo back"
-      }
-    }
-  }
+  "entrypoint": "_start"
 }
 `, appName, author, description)
 }
@@ -303,49 +302,64 @@ A WazeOS WASM application that can be called as an MCP tool.
 ## Quick Start
 
 `+"```bash"+`
-make build    # Build WASM binary
-make package  # Create ZIP package
-make install  # Install locally
-`+"```"+`
+# Build the app
+wazeos apps build .
 
-## Building
+# Build and create package
+wazeos apps package .
 
-Requires [TinyGo](https://tinygo.org/) for WASM compilation:
-
-`+"```bash"+`
-tinygo build -o app.wasm -target=wasi main.go
+# Build, package, and install
+wazeos apps install .
 `+"```"+`
 
 ## Development
 
-This app uses the WazeOS SDK which handles all JSON parsing, error handling, and context management automatically.
+This app uses the WazeOS SDK with automatic schema generation from Go structs.
+
+### Defining Input Parameters
+
+Define your input parameters as a Go struct with JSON Schema tags:
+
+`+"```go"+`
+type Input struct {
+    Message string `+"`json:\"message\" description:\"Message to echo back\" example:\"World\"`"+`
+    Count   int    `+"`json:\"count,omitempty\" description:\"Repeat count\" default:\"1\" min:\"1\" max:\"10\"`"+`
+}
+`+"```"+`
+
+**Available struct tags:**
+- `+"`json`"+` - JSON field name and options (required)
+- `+"`description`"+` - Field description for MCP
+- `+"`example`"+` - Example value
+- `+"`default`"+` - Default value
+- `+"`min`"+`, `+"`max`"+` - Validation for numbers
+- `+"`minLength`"+`, `+"`maxLength`"+` - Validation for strings
+- `+"`pattern`"+` - Regex pattern for strings
+- `+"`enum`"+` - Comma-separated allowed values
+
+The JSON Schema is automatically generated during build!
 
 ### Implementing the Handler
 
 Edit the `+"`Handle`"+` method in `+"`main.go`"+` to process MCP tool calls:
 
 `+"```go"+`
-func (t *Tool) Handle(ctx *app.Context, input map[string]interface{}) (map[string]interface{}, error) {
-    // Get input parameters (type-safe)
-    message, _ := input["message"].(string)
+func (t *Tool) Handle(ctx *app.Context, inputRaw map[string]interface{}) (map[string]interface{}, error) {
+    // Parse input into typed struct
+    var input Input
+    data, _ := json.Marshal(inputRaw)
+    json.Unmarshal(data, &input)
 
-    // Use context for logging, auth, I/O
-    ctx.Log.Info("processing request")
+    // Use typed fields with auto-completion!
+    greeting := fmt.Sprintf("Hello, %s!", input.Message)
 
     // Return JSON response
     return map[string]interface{}{
         "status": "success",
-        "result": "processed",
+        "message": greeting,
     }, nil
 }
 `+"```"+`
-
-The SDK's `+"`app.RunMCPTool()`"+` function handles:
-- Reading and parsing JSON input from stdin
-- Building execution context from environment variables
-- Calling your Handle method with parsed input
-- Writing the JSON response to stdout
-- Error handling and exit codes
 
 ### Using the Context
 
@@ -374,11 +388,24 @@ result, err := ctx.IO.CallApp("other-app", map[string]interface{}{"key": "value"
 ### MCP Tool Integration
 
 When installed, this app is automatically exposed as an MCP tool that Claude can call.
-The `+"`inputSchema`"+` in `+"`metadata.json`"+` defines the tool's parameters.
+The `+"`inputSchema`"+` is generated from your Input struct during build.
+
+## Build Process
+
+When you run `+"`wazeos apps build`"+`, it:
+1. Scans your Go code for the Input struct
+2. Extracts JSON Schema from struct tags
+3. Updates metadata.json automatically
+4. Compiles to WASM using TinyGo
+
+No manual schema maintenance needed!
 
 ## Testing
 
 `+"```bash"+`
+# Build first
+wazeos apps build .
+
 # Test with sample input
 echo '{"message": "World"}' | ./app.wasm
 
@@ -388,17 +415,14 @@ echo '{"message": "World"}' | ./app.wasm
 
 ## Structure
 
-- `+"`main.go`"+` - Application implementation with Handle method
-- `+"`metadata.json`"+` - Package metadata with inputSchema for MCP
+- `+"`main.go`"+` - Application implementation with Input struct and Handle method
+- `+"`metadata.json`"+` - Package metadata (inputSchema auto-generated)
 - `+"`go.mod`"+` - Go module definition
-- `+"`Makefile`"+` - Build automation
 
-## Customization
+## Requirements
 
-1. Update the `+"`inputSchema`"+` in `+"`metadata.json`"+` to define your tool's parameters
-2. Implement your business logic in the `+"`Handle`"+` method
-3. Use `+"`ctx.IO`"+` for file, HTTP, and inter-app operations
-4. Use `+"`ctx.Log`"+` for structured logging
+- [TinyGo](https://tinygo.org/getting-started/install/) for WASM compilation
+- WazeOS CLI
 
 ## Author
 
@@ -413,6 +437,10 @@ app.wasm
 
 # TinyGo cache
 .tinygo-cache/
+
+# IDE
+.vscode/
+.idea/
 
 # OS files
 .DS_Store

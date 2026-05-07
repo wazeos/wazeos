@@ -34,6 +34,8 @@ Examples:
 func init() {
 	// Add subcommands
 	AppsCmd.AddCommand(newCmd)
+	AppsCmd.AddCommand(buildCmd)
+	AppsCmd.AddCommand(packageCmd)
 	AppsCmd.AddCommand(listCmd)
 	AppsCmd.AddCommand(installCmd)
 	AppsCmd.AddCommand(showCmd)
