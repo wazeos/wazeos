@@ -81,48 +81,67 @@ func matchesPattern(uri *parsedURI, pattern *parsedURI) int {
 
 	score := 0
 
-	// Host matching
+	// Host matching - pattern must match to qualify as candidate
 	if pattern.host == "*" {
-		// Full wildcard - lowest score
+		// Full wildcard - matches any host with lowest score
 		score += 0
 	} else if strings.HasPrefix(pattern.host, "*.") {
 		// Prefix wildcard like *.example.com
 		suffix := pattern.host[2:] // remove "*."
-		if !strings.HasSuffix(uri.host, suffix) {
-			return -1 // no match
+
+		// Suffix must not be empty and must match the end of the URI host
+		if suffix == "" || !strings.HasSuffix(uri.host, suffix) {
+			return -1 // no match - disqualified as candidate
 		}
+
+		// Additional check: URI host must have content before the suffix
+		// e.g., "example.com" should NOT match "*.example.com" (no subdomain)
+		if uri.host == suffix {
+			return -1 // no match - exact match required, not wildcard
+		}
+
 		// Score based on how much of the host matches (count domain segments)
-		// e.g., *.api.example.com (2 segments) scores higher than *.example.com (1 segment)
+		// e.g., *.api.example.com (3 segments) scores higher than *.example.com (2 segments)
 		segments := strings.Count(suffix, ".") + 1 // +1 because "example.com" has 1 dot but 2 segments
 		score += segments * 15
 	} else {
-		// Exact host match
+		// Exact host match required
 		if uri.host != pattern.host {
-			return -1 // no match
+			return -1 // no match - disqualified as candidate
 		}
 		// Exact host match scores highest
 		segments := strings.Count(pattern.host, ".") + 1
 		score += (segments * 15) + len(pattern.host) + 50
 	}
 
-	// Path matching
+	// Path matching - pattern must match to qualify as candidate
 	if pattern.path == "/*" || pattern.path == "*" {
-		// Full wildcard - lowest score
+		// Full wildcard - matches any path with lowest score
 		score += 0
 	} else if strings.HasSuffix(pattern.path, "/*") {
 		// Suffix wildcard like /path/to/*
 		prefix := pattern.path[:len(pattern.path)-2] // remove "/*"
+
+		// Prefix must actually match the start of the URI path
 		if !strings.HasPrefix(uri.path, prefix) {
-			return -1 // no match
+			return -1 // no match - disqualified as candidate
 		}
-		// Score based on how much of the path matches
-		// Segments give coarse granularity, length gives fine granularity
-		segments := strings.Count(prefix, "/")
-		score += (segments * 10) + len(prefix)
+
+		// If prefix is just "/", ensure we're not matching "/*" as a full wildcard
+		// (already handled above, but explicit check for clarity)
+		if prefix == "" || prefix == "/" {
+			// This is effectively a full wildcard, score as such
+			score += 0
+		} else {
+			// Score based on how much of the path matches
+			// Segments give coarse granularity, length gives fine granularity
+			segments := strings.Count(prefix, "/")
+			score += (segments * 10) + len(prefix)
+		}
 	} else {
-		// Exact path match
+		// Exact path match required
 		if uri.path != pattern.path {
-			return -1 // no match
+			return -1 // no match - disqualified as candidate
 		}
 		// Exact matches score highest
 		segments := strings.Count(pattern.path, "/")

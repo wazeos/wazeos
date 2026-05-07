@@ -324,6 +324,70 @@ func TestFindBestDriver_WildcardHostGranularity(t *testing.T) {
 	assert.Equal(t, "short-wildcard", driver.Name())
 }
 
+func TestMatchesPattern_StrictValidation(t *testing.T) {
+	tests := []struct {
+		name      string
+		uri       string
+		pattern   string
+		wantMatch bool
+		reason    string
+	}{
+		{
+			name:      "wildcard host requires subdomain",
+			uri:       "https://example.com/path",
+			pattern:   "https://*.example.com/*",
+			wantMatch: false,
+			reason:    "*.example.com should NOT match example.com (no subdomain)",
+		},
+		{
+			name:      "wildcard host matches with subdomain",
+			uri:       "https://api.example.com/path",
+			pattern:   "https://*.example.com/*",
+			wantMatch: true,
+			reason:    "*.example.com SHOULD match api.example.com",
+		},
+		{
+			name:      "empty suffix after wildcard",
+			uri:       "https://api.example.com/path",
+			pattern:   "https://*/path",
+			wantMatch: true,
+			reason:    "*./ matches any host",
+		},
+		{
+			name:      "path prefix must actually match",
+			uri:       "file:///other/file.txt",
+			pattern:   "file:///data/*",
+			wantMatch: false,
+			reason:    "/data/* should NOT match /other/",
+		},
+		{
+			name:      "path wildcard with root prefix",
+			uri:       "file:///data/file.txt",
+			pattern:   "file:///*",
+			wantMatch: true,
+			reason:    "/* matches any path",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uriParsed, err := parseURI(tt.uri)
+			require.NoError(t, err)
+
+			patternParsed, err := parseURI(tt.pattern)
+			require.NoError(t, err)
+
+			score := matchesPattern(uriParsed, patternParsed)
+
+			if tt.wantMatch {
+				assert.GreaterOrEqual(t, score, 0, "%s: %s", tt.reason, tt.name)
+			} else {
+				assert.Equal(t, -1, score, "%s: %s", tt.reason, tt.name)
+			}
+		})
+	}
+}
+
 func TestCall_UsesPatternMatching(t *testing.T) {
 	bus := NewMemoryIOBus(nil)
 
