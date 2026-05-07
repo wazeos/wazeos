@@ -25,17 +25,25 @@ The router finds the best match using this priority:
 
 ## Scoring System
 
-Each match receives a specificity score (higher = more specific):
+Each match receives a specificity score (higher = more specific). The scoring considers both segment count and actual length for fine-grained matching.
 
 - **Host scoring:**
-  - Exact match: +100 points
-  - Prefix wildcard (`*.domain.com`): +50 points
-  - Full wildcard (`*`): +0 points
+  - Exact match: (segments × 15) + length + 50 points
+    - Example: `api.example.com` = (3 × 15) + 15 + 50 = 110
+  - Prefix wildcard (`*.domain.com`): (suffix segments × 15) points
+    - Example: `*.example.com` = (2 × 15) = 30
+    - Example: `*.com` = (1 × 15) = 15
+  - Full wildcard (`*`): 0 points
 
 - **Path scoring:**
-  - Exact match: +100 points + (segments × 10)
-  - Suffix wildcard (`/path/*`): +(segments × 10)
-  - Full wildcard (`/*`): +0 points
+  - Exact match: (segments × 10) + length + 100 points
+    - Example: `/data/file.txt` = (2 × 10) + 15 + 100 = 135
+  - Suffix wildcard (`/path/*`): (prefix segments × 10) + prefix length
+    - Example: `/data/users/*` = (2 × 10) + 12 = 32
+    - Example: `/data/*` = (1 × 10) + 6 = 16
+  - Full wildcard (`/*`): 0 points
+
+**Key improvement**: Patterns with the same segment count are differentiated by length. For example, `/abc/*` scores higher than `/a/*` because the prefix is longer (3 vs 1 character).
 
 ## Examples
 
@@ -49,8 +57,8 @@ Drivers registered:
 
 URI: file:///data/important.txt
 ├─ Driver 1 matches: score 0 (full wildcard)
-├─ Driver 2 matches: score 110 (1 path segment + wildcard)
-└─ Driver 3 matches: score 220 (exact match) ✓ SELECTED
+├─ Driver 2 matches: score 80 (1 segment × 10 + 6 chars = 16)
+└─ Driver 3 matches: score 204 (2 segments × 10 + 24 chars + 100) ✓ SELECTED
 ```
 
 ### HTTP API Routing
@@ -64,9 +72,9 @@ Drivers registered:
 
 URI: https://api.example.com/v1/users
 ├─ Driver 1 matches: score 0 (full wildcards)
-├─ Driver 2 matches: score 50 (host wildcard)
-├─ Driver 3 matches: score 100 (exact host, path wildcard)
-└─ Driver 4 matches: score 120 (exact host, 2 path segments) ✓ SELECTED
+├─ Driver 2 matches: score 30 (2 host segments × 15)
+├─ Driver 3 matches: score 110 (exact host: 3×15 + 15 chars + 50)
+└─ Driver 4 matches: score 133 (exact host + 1 segment × 10 + 4 chars) ✓ SELECTED
 ```
 
 ### Subdomain Routing
@@ -77,11 +85,25 @@ Drivers registered:
 2. https://api.example.com/*      (API subdomain)
 
 URI: https://api.example.com/resource
-├─ Driver 1 matches: score 50 (wildcard host)
-└─ Driver 2 matches: score 100 (exact host) ✓ SELECTED
+├─ Driver 1 matches: score 30 (wildcard host: 2 segments × 15)
+└─ Driver 2 matches: score 110 (exact host) ✓ SELECTED
 
 URI: https://admin.example.com/resource
-└─ Driver 1 matches: score 50 ✓ SELECTED (only match)
+└─ Driver 1 matches: score 30 ✓ SELECTED (only match)
+```
+
+### Length-Based Granularity
+
+```
+Drivers registered:
+1. file:///a/*                    (short path)
+2. file:///abc/*                  (longer path)
+
+URI: file:///abc/test.txt
+├─ Driver 1 matches: score 77 (1 segment × 10 + 1 char + 6 chars)
+└─ Driver 2 matches: score 79 (1 segment × 10 + 3 chars + 6 chars) ✓ SELECTED
+
+Even with the same segment count, the longer prefix wins!
 ```
 
 ## Benefits

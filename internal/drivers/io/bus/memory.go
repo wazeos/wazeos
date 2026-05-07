@@ -91,13 +91,18 @@ func matchesPattern(uri *parsedURI, pattern *parsedURI) int {
 		if !strings.HasSuffix(uri.host, suffix) {
 			return -1 // no match
 		}
-		score += 50
+		// Score based on how much of the host matches (count domain segments)
+		// e.g., *.api.example.com (2 segments) scores higher than *.example.com (1 segment)
+		segments := strings.Count(suffix, ".") + 1 // +1 because "example.com" has 1 dot but 2 segments
+		score += segments * 15
 	} else {
 		// Exact host match
 		if uri.host != pattern.host {
 			return -1 // no match
 		}
-		score += 100
+		// Exact host match scores highest
+		segments := strings.Count(pattern.host, ".") + 1
+		score += (segments * 15) + len(pattern.host) + 50
 	}
 
 	// Path matching
@@ -110,17 +115,18 @@ func matchesPattern(uri *parsedURI, pattern *parsedURI) int {
 		if !strings.HasPrefix(uri.path, prefix) {
 			return -1 // no match
 		}
-		// Score based on depth of prefix
+		// Score based on how much of the path matches
+		// Segments give coarse granularity, length gives fine granularity
 		segments := strings.Count(prefix, "/")
-		score += segments * 10
+		score += (segments * 10) + len(prefix)
 	} else {
 		// Exact path match
 		if uri.path != pattern.path {
 			return -1 // no match
 		}
-		// Score based on path depth
+		// Exact matches score highest
 		segments := strings.Count(pattern.path, "/")
-		score += segments * 10 + 100
+		score += (segments * 10) + len(pattern.path) + 100
 	}
 
 	return score

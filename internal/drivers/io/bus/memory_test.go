@@ -107,35 +107,35 @@ func TestMatchesPattern(t *testing.T) {
 			uri:       "file:///data/file.txt",
 			pattern:   "file:///data/file.txt",
 			wantMatch: true,
-			minScore:  100, // exact matches score high
+			minScore:  100, // exact path: (2 segments * 10) + 15 chars + 100 = 135+
 		},
 		{
 			name:      "file path wildcard match",
 			uri:       "file:///data/file.txt",
 			pattern:   "file:///data/*",
 			wantMatch: true,
-			minScore:  10, // wildcard but some path specificity
+			minScore:  10, // wildcard: (1 segment * 10) + 6 chars = 16+
 		},
 		{
 			name:      "file full wildcard match",
 			uri:       "file:///data/file.txt",
 			pattern:   "file://*/*",
 			wantMatch: true,
-			minScore:  0, // full wildcard
+			minScore:  0, // full wildcard: 0
 		},
 		{
 			name:      "https exact host match",
 			uri:       "https://api.example.com/v1/users",
 			pattern:   "https://api.example.com/*",
 			wantMatch: true,
-			minScore:  100, // exact host + path wildcard
+			minScore:  100, // exact host: (3 segments * 15) + 15 chars + 50 + path = 110+
 		},
 		{
 			name:      "https wildcard host match",
 			uri:       "https://api.example.com/v1/users",
 			pattern:   "https://*.example.com/*",
 			wantMatch: true,
-			minScore:  50, // wildcard host
+			minScore:  30, // wildcard host: (2 segments * 15) = 30
 		},
 		{
 			name:      "https no match different host",
@@ -268,6 +268,60 @@ func TestFindBestDriver_HTTPHosts(t *testing.T) {
 			assert.Equal(t, tt.expectedDriver, driver.Name())
 		})
 	}
+}
+
+func TestFindBestDriver_LengthGranularity(t *testing.T) {
+	bus := NewMemoryIOBus(nil)
+
+	// Register drivers with same segment count but different lengths
+	shortPathDriver := &mockResourceDriver{
+		name:     "short",
+		patterns: []string{"file:///a/*"},
+	}
+	longPathDriver := &mockResourceDriver{
+		name:     "long",
+		patterns: []string{"file:///abc/*"},
+	}
+
+	require.NoError(t, bus.RegisterDriver(shortPathDriver))
+	require.NoError(t, bus.RegisterDriver(longPathDriver))
+
+	// Both patterns have 1 segment, but /abc/ is longer and should win
+	driver, err := bus.findBestDriver("file:///abc/test.txt")
+	require.NoError(t, err)
+	assert.Equal(t, "long", driver.Name(), "longer prefix should win when segment count is equal")
+
+	// For /a/ path, only short driver matches
+	driver, err = bus.findBestDriver("file:///a/test.txt")
+	require.NoError(t, err)
+	assert.Equal(t, "short", driver.Name())
+}
+
+func TestFindBestDriver_WildcardHostGranularity(t *testing.T) {
+	bus := NewMemoryIOBus(nil)
+
+	// Register drivers with different wildcard host specificities
+	shortWildcardDriver := &mockResourceDriver{
+		name:     "short-wildcard",
+		patterns: []string{"https://*.com/*"},
+	}
+	longWildcardDriver := &mockResourceDriver{
+		name:     "long-wildcard",
+		patterns: []string{"https://*.example.com/*"},
+	}
+
+	require.NoError(t, bus.RegisterDriver(shortWildcardDriver))
+	require.NoError(t, bus.RegisterDriver(longWildcardDriver))
+
+	// *.example.com has more segments (2) than *.com (1), so it should win
+	driver, err := bus.findBestDriver("https://api.example.com/resource")
+	require.NoError(t, err)
+	assert.Equal(t, "long-wildcard", driver.Name(), "longer wildcard suffix should win")
+
+	// For other.com, only short wildcard matches
+	driver, err = bus.findBestDriver("https://other.com/resource")
+	require.NoError(t, err)
+	assert.Equal(t, "short-wildcard", driver.Name())
 }
 
 func TestCall_UsesPatternMatching(t *testing.T) {
