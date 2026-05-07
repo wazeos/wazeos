@@ -38,37 +38,25 @@ func (d *NativeS3Driver) HandleCall(ctx context.Context, call *types.ResourceCal
 	// Extract credentials from X-WazeOS-Credentials header
 	credsJSON := call.Headers["X-WazeOS-Credentials"]
 	if credsJSON == "" {
-		return &types.ResourceResult{
-			StatusCode: 401,
-			Body:       []byte(`{"error":"missing credentials"}`),
-		}, nil
+		return types.ErrorResult(401, "missing credentials"), nil
 	}
 
 	var creds map[string]string
 	if err := json.Unmarshal([]byte(credsJSON), &creds); err != nil {
-		return &types.ResourceResult{
-			StatusCode: 400,
-			Body:       []byte(fmt.Sprintf(`{"error":"invalid credentials: %v"}`, err)),
-		}, nil
+		return types.ErrorResult(400, "invalid credentials: %v", err), nil
 	}
 
 	accessKeyID := creds["access_key_id"]
 	secretAccessKey := creds["secret_access_key"]
 	if accessKeyID == "" || secretAccessKey == "" {
-		return &types.ResourceResult{
-			StatusCode: 401,
-			Body:       []byte(`{"error":"missing access_key_id or secret_access_key"}`),
-		}, nil
+		return types.ErrorResult(401, "missing access_key_id or secret_access_key"), nil
 	}
 
 	// Parse S3 URI: s3://bucket.s3.region.amazonaws.com/key
 	uri := strings.TrimPrefix(call.URI, "s3://")
 	parts := strings.SplitN(uri, "/", 2)
 	if len(parts) != 2 {
-		return &types.ResourceResult{
-			StatusCode: 400,
-			Body:       []byte(`{"error":"invalid S3 URI format, expected s3://bucket/key"}`),
-		}, nil
+		return types.ErrorResult(400, "invalid S3 URI format, expected s3://bucket/key"), nil
 	}
 
 	bucketFQDN := parts[0]
@@ -90,10 +78,7 @@ func (d *NativeS3Driver) HandleCall(ctx context.Context, call *types.ResourceCal
 		)),
 	)
 	if err != nil {
-		return &types.ResourceResult{
-			StatusCode: 500,
-			Body:       []byte(fmt.Sprintf(`{"error":"failed to load AWS config: %v"}`, err)),
-		}, nil
+		return types.ErrorResult(500, "failed to load AWS config: %v", err), nil
 	}
 
 	// Create S3 client
@@ -130,10 +115,7 @@ func (d *NativeS3Driver) HandleCall(ctx context.Context, call *types.ResourceCal
 		return d.handleRead(client, bucket, key)
 	}
 
-	return &types.ResourceResult{
-		StatusCode: 403,
-		Body:       []byte(`{"error":"no valid operation permission provided"}`),
-	}, nil
+	return types.ErrorResult(403, "no valid operation permission provided"), nil
 }
 
 // parseBucketFQDN extracts bucket name and region from FQDN
@@ -170,10 +152,7 @@ func (d *NativeS3Driver) handleWrite(client *s3.Client, bucket, key string, data
 		Body:   bytes.NewReader(data),
 	})
 	if err != nil {
-		return &types.ResourceResult{
-			StatusCode: 500,
-			Body:       []byte(fmt.Sprintf(`{"error":"S3 PutObject failed: %v"}`, err)),
-		}, nil
+		return types.ErrorResult(500, "S3 PutObject failed: %v", err), nil
 	}
 
 	response := map[string]interface{}{
@@ -184,10 +163,7 @@ func (d *NativeS3Driver) handleWrite(client *s3.Client, bucket, key string, data
 	}
 	responseJSON, _ := json.Marshal(response)
 
-	return &types.ResourceResult{
-		StatusCode: 200,
-		Body:       responseJSON,
-	}, nil
+	return types.SuccessResult(200, responseJSON), nil
 }
 
 func (d *NativeS3Driver) handleRead(client *s3.Client, bucket, key string) (*types.ResourceResult, error) {
@@ -237,10 +213,7 @@ func (d *NativeS3Driver) handleDelete(client *s3.Client, bucket, key string) (*t
 	}
 	responseJSON, _ := json.Marshal(response)
 
-	return &types.ResourceResult{
-		StatusCode: 200,
-		Body:       responseJSON,
-	}, nil
+	return types.SuccessResult(200, responseJSON), nil
 }
 
 func (d *NativeS3Driver) handleList(client *s3.Client, bucket, prefix string) (*types.ResourceResult, error) {
@@ -272,8 +245,5 @@ func (d *NativeS3Driver) handleList(client *s3.Client, bucket, prefix string) (*
 	}
 	responseJSON, _ := json.Marshal(response)
 
-	return &types.ResourceResult{
-		StatusCode: 200,
-		Body:       responseJSON,
-	}, nil
+	return types.SuccessResult(200, responseJSON), nil
 }
