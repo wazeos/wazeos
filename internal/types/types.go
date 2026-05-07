@@ -233,26 +233,36 @@ type WazeroPermissions struct {
 	StdIO     bool     `json:"stdio,omitempty"`     // DEPRECATED: Stdio is always enabled for all modules
 }
 
-// DriverPermissions represents permissions for driver packages.
-type DriverPermissions struct {
+// DriverPrivileges represents privileges granted TO drivers by wazero.
+// These are system capabilities the driver requests.
+type DriverPrivileges struct {
 	Wazero        WazeroPermissions `json:"wazero"`
 	HostFunctions []string          `json:"hostFunctions"` // Allowed host function namespaces
 }
 
+// PermissionDefinitionMetadata represents a permission definition in driver metadata.
+// These define the permissions that the driver EXPOSES for access control.
+type PermissionDefinitionMetadata struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Bit         uint64 `json:"bit"`
+}
+
 // AppMetadata represents parsed metadata from an app package.
 type AppMetadata struct {
-	Name          string             `json:"name"`
-	Version       string             `json:"version"`
-	Author        string             `json:"author"`
-	Description   string             `json:"description,omitempty"`
-	Type          string             `json:"type,omitempty"`          // "app" or "driver" (default: "app")
-	DriverClass   string             `json:"driverClass,omitempty"`   // Driver class if type="driver"
-	URIPatterns   []string           `json:"uriPatterns,omitempty"`   // URI patterns this driver handles (e.g., ["file://*/*"])
-	Dependencies  []string           `json:"dependencies,omitempty"`
-	Entrypoint    string             `json:"entrypoint,omitempty"`    // Wasm entrypoint (default: "_start")
-	Prerequisites []string           `json:"prerequisites,omitempty"` // Apps that must be installed
-	Permissions   *DriverPermissions `json:"permissions,omitempty"`   // Permissions for drivers
-	InputSchema   *json.RawMessage   `json:"inputSchema,omitempty"`   // MCP tool schema (JSON Schema format)
+	Name          string                          `json:"name"`
+	Version       string                          `json:"version"`
+	Author        string                          `json:"author"`
+	Description   string                          `json:"description,omitempty"`
+	Type          string                          `json:"type,omitempty"`          // "app" or "driver" (default: "app")
+	DriverClass   string                          `json:"driverClass,omitempty"`   // Driver class if type="driver"
+	URIPatterns   []string                        `json:"uriPatterns,omitempty"`   // URI patterns this driver handles (e.g., ["file://*/*"])
+	Dependencies  []string                        `json:"dependencies,omitempty"`
+	Entrypoint    string                          `json:"entrypoint,omitempty"`    // Wasm entrypoint (default: "_start")
+	Prerequisites []string                        `json:"prerequisites,omitempty"` // Apps that must be installed
+	Privileges    *DriverPrivileges               `json:"privileges,omitempty"`    // System privileges for drivers (wazero capabilities)
+	Permissions   []PermissionDefinitionMetadata  `json:"permissions,omitempty"`   // Access control permissions exposed by drivers
+	InputSchema   *json.RawMessage                `json:"inputSchema,omitempty"`   // MCP tool schema (JSON Schema format)
 }
 
 // AppID returns the canonical app identifier.
@@ -275,10 +285,10 @@ func (m *AppMetadata) GetEntrypoint() string {
 
 // HasPermission checks if a host function is allowed.
 func (m *AppMetadata) HasPermission(hostFunc string) bool {
-	if m.Permissions == nil {
+	if m.Privileges == nil {
 		return false
 	}
-	for _, allowed := range m.Permissions.HostFunctions {
+	for _, allowed := range m.Privileges.HostFunctions {
 		if allowed == hostFunc || allowed == "*" {
 			return true
 		}

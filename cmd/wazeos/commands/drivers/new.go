@@ -231,10 +231,14 @@ func generateDriverMetadata(author, driverName, description, driverClass string,
   "driverClass": "%s",
   "uriPatterns": %s,
   "entrypoint": "_start",
-  "permissions": {
+  "privileges": {
     "wazero": {},
     "hostFunctions": []
-  }
+  },
+  "permissions": [
+    {"name": "read", "description": "Read access", "bit": 1},
+    {"name": "write", "description": "Write access", "bit": 2}
+  ]
 }
 `, driverName, author, description, driverClass, patternsJSON)
 }
@@ -371,9 +375,22 @@ echo '{"method":"GET","uri":"test://example"}' | ./app.wasm
 ## Structure
 
 - `+"`main.go`"+` - Driver implementation with HandleCall method
-- `+"`metadata.json`"+` - Driver metadata and permissions
+- `+"`metadata.json`"+` - Driver metadata, privileges, and permissions
 - `+"`go.mod`"+` - Go module definition
 - `+"`Makefile`"+` - Build automation
+
+### Metadata Structure
+
+The `+"`metadata.json`"+` file contains two distinct concepts:
+
+**Privileges** - System capabilities the driver requests FROM wazero:
+- `+"`wazero`"+` - Wazero-specific capabilities (network, filesystem, etc.)
+- `+"`hostFunctions`"+` - Allowed host function namespaces
+
+**Permissions** - Access control permissions the driver EXPOSES to apps:
+- Defines the operations apps can request (e.g., GET, POST, read, write)
+- Each permission has a name, description, and bit flag for efficient checking
+- Apps request these permissions in their access control policies
 
 ## Author
 
