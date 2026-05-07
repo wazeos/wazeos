@@ -32,6 +32,8 @@ Examples:
 func init() {
 	// Add subcommands
 	DriversCmd.AddCommand(newCmd)
+	DriversCmd.AddCommand(buildCmd)
+	DriversCmd.AddCommand(packageCmd)
 	DriversCmd.AddCommand(listCmd)
 	DriversCmd.AddCommand(showCmd)
 	DriversCmd.AddCommand(installCmd)
