@@ -224,7 +224,7 @@ func TestContext() *Context {
 		Metadata:    make(map[string]string),
 	}
 
-	ctx.IO = mockIO
+	ctx.io = mockIO
 	ctx.Log = &Logger{ctx: ctx}
 
 	// Store reference for mock access
@@ -280,7 +280,7 @@ func AllowApp(pattern string) driver.PermissionEntry {
 
 // GetMockIO returns the mock I/O client from a test context.
 func GetMockIO(ctx *Context) *MockIOClient {
-	mock, _ := ctx.IO.(*MockIOClient)
+	mock, _ := ctx.io.(*MockIOClient)
 	return mock
 }
 

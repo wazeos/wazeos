@@ -162,7 +162,7 @@ func RunConsumer(topic string, handler MessageHandler, opts *ConsumeOptions) {
 		opts = &ConsumeOptions{MaxCount: 10, Timeout: 5}
 	}
 
-	messages, err := ctx.IO.Consume(topic, opts)
+	messages, err := ctx.Consume(topic, opts)
 	if err != nil {
 		handleError(ctx, err)
 		os.Exit(1)

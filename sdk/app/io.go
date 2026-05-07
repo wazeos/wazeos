@@ -11,19 +11,159 @@ import (
 
 // IOClient provides high-level I/O operations for apps.
 type IOClient interface {
+	// Deprecated: Use IO() instead
 	ReadFile(path string) ([]byte, error)
+	// Deprecated: Use IO() instead
 	WriteFile(path string, data []byte) error
+	// Deprecated: Use IO() instead
 	DeleteFile(path string) error
+	// Deprecated: Use IO() instead
 	ListFiles(dir string) ([]string, error)
+	// Deprecated: Use IO() instead
 	Get(url string) (*HTTPResponse, error)
+	// Deprecated: Use IO() instead
 	Post(url string, body []byte, headers map[string]string) (*HTTPResponse, error)
+	// Deprecated: Use IO() instead
 	Request(method, url string, body []byte, headers map[string]string) (*HTTPResponse, error)
+	// Deprecated: Use IO() instead
 	CallApp(appName string, args ...string) (*Response, error)
+	// Deprecated: Use IO() instead
 	CallAppWithInput(appName string, input []byte, args ...string) (*Response, error)
+	// Deprecated: Use IO() instead
 	Publish(topic string, message []byte) error
+	// Deprecated: Use IO() instead
 	PublishWithKey(topic, key string, message []byte) error
+	// Deprecated: Use IO() instead
 	Consume(topic string, opts *ConsumeOptions) ([]*Message, error)
+	// Deprecated: Use IO() instead
 	Call(uri, method string, body []byte, headers map[string]string) (*driver.ResourceResult, error)
+}
+
+// IOOperation represents a pending I/O operation with required permissions.
+type IOOperation struct {
+	ctx         *Context
+	uri         string
+	permissions []string
+}
+
+// Call executes the I/O operation with the given arguments.
+// Args are driver-specific and passed as a map for flexibility.
+//
+// Example usage:
+//
+//	// File read
+//	result, err := ctx.IO("file:///tmp/config.txt", []string{"read"}).Call(nil)
+//
+//	// File write
+//	err := ctx.IO("file:///tmp/config.txt", []string{"write"}).Call(map[string]interface{}{
+//	    "data": []byte("content"),
+//	})
+//
+//	// HTTP request
+//	result, err := ctx.IO("https://api.example.com/data", []string{"POST"}).Call(map[string]interface{}{
+//	    "body": []byte("data"),
+//	    "headers": map[string]string{"Content-Type": "application/json"},
+//	})
+//
+//	// App call
+//	result, err := ctx.IO("fn://wazeos/logger", []string{"invoke"}).Call(map[string]interface{}{
+//	    "level": "info",
+//	    "message": "test",
+//	})
+func (op *IOOperation) Call(args map[string]interface{}) (map[string]interface{}, error) {
+	// Convert permissions to AccessBits for the driver call
+	var accessMode driver.AccessBits
+	for _, perm := range op.permissions {
+		// Map permission strings to access bits
+		switch strings.ToLower(perm) {
+		case "read", "get", "list", "consume":
+			accessMode |= driver.AccessRead
+		case "write", "post", "put", "patch", "create", "produce", "delete":
+			accessMode |= driver.AccessWrite
+		case "invoke", "execute":
+			accessMode |= driver.AccessExecute
+		default:
+			// For driver-specific permissions (like HTTP methods), use read by default
+			// The driver will validate the specific permission
+			accessMode |= driver.AccessRead
+		}
+	}
+
+	// Encode args as JSON for the driver call
+	var body []byte
+	var headers map[string]string
+	if args != nil {
+		// Extract common fields if present
+		if h, ok := args["headers"].(map[string]string); ok {
+			headers = h
+		} else {
+			headers = make(map[string]string)
+		}
+
+		// Extract body if present
+		if b, ok := args["body"].([]byte); ok {
+			body = b
+		} else if b, ok := args["data"].([]byte); ok {
+			body = b
+		} else {
+			// Encode entire args as JSON
+			var err error
+			body, err = json.Marshal(args)
+			if err != nil {
+				return nil, WrapError(err, "IO_ERROR", "failed to encode arguments", 500)
+			}
+		}
+	} else {
+		headers = make(map[string]string)
+	}
+
+	// Determine method from permissions (first permission is typically the method)
+	method := "CALL"
+	if len(op.permissions) > 0 {
+		method = strings.ToUpper(op.permissions[0])
+	}
+
+	// Make the driver call
+	result, err := driver.CallResourceCall(&driver.ResourceCall{
+		URI:        op.uri,
+		Method:     method,
+		Headers:    headers,
+		Body:       body,
+		AccessMode: accessMode,
+	})
+
+	if err != nil {
+		return nil, WrapError(err, "IO_ERROR", "failed to execute I/O operation", 500)
+	}
+
+	// Return error if status indicates failure
+	if result.StatusCode >= 400 {
+		return nil, NewError("IO_ERROR", getErrorMessage(result), result.StatusCode)
+	}
+
+	// Parse result body as JSON if possible
+	var resultMap map[string]interface{}
+	if len(result.Body) > 0 {
+		if err := json.Unmarshal(result.Body, &resultMap); err != nil {
+			// If not JSON, return raw body
+			resultMap = map[string]interface{}{
+				"body":       result.Body,
+				"statusCode": result.StatusCode,
+				"headers":    result.Headers,
+			}
+		} else {
+			// Add metadata to result
+			resultMap["statusCode"] = result.StatusCode
+			resultMap["headers"] = result.Headers
+		}
+	} else {
+		resultMap = map[string]interface{}{
+			"statusCode": result.StatusCode,
+			"headers":    result.Headers,
+		}
+	}
+
+	return resultMap, nil
 }
 
 // realIOClient is the production implementation of IOClient.
