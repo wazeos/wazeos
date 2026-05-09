@@ -48,16 +48,13 @@ import (
 // Host Function Imports
 // ============================================================================
 
-//go:wasm-module env
-//export host_iobus_call
+//go:wasmimport env host_iobus_call
 func hostIOBusCall(ptr, length uint32) uint64
 
-//go:wasm-module env
-//export host_iobus_create_handle
+//go:wasmimport env host_iobus_create_handle
 func hostIOBusCreateHandle(ptr, length uint32) uint64
 
-//go:wasm-module env
-//export host_iobus_close_handle
+//go:wasmimport env host_iobus_close_handle
 func hostIOBusCloseHandle(ptr, length uint32) uint32
 
 // ============================================================================
