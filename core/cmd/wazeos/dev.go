@@ -8,10 +8,12 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/wazeos/wazeos/core/kernel/iobus"
+	wasmloader "github.com/wazeos/wazeos/drivers/runtime/wasm"
 )
 
 var devCmd = &cobra.Command{
@@ -147,6 +149,13 @@ func runDevRun(cmd *cobra.Command, args []string) {
 
 	// Create isolated IOBus
 	bus := iobus.NewIOBus(logger)
+
+	// Register WASM runtime (both loader and driver) so we can load and execute WASM drivers
+	if err := wasmloader.RegisterWASMRuntime(bus); err != nil {
+		outputError("dev run", "RUNTIME_REGISTRATION_FAILED",
+			fmt.Sprintf("failed to register WASM runtime: %v", err), "")
+	}
+
 	logInfo("✓ Created isolated IOBus")
 
 	// Load drivers
@@ -158,9 +167,14 @@ func runDevRun(cmd *cobra.Command, args []string) {
 					fmt.Sprintf("driver not found: %s", driverPath), "")
 			}
 			logInfo("  [%d/%d] Loading: %s", i+1, len(devDrivers), driverPath)
-			// TODO: Load plugin driver
-			// For now, just validate it exists
-			logSuccess("    ✓", "Driver validated")
+
+			// Load WASM driver
+			if err := loadWASMDriver(bus, driverPath, i); err != nil {
+				outputError("dev run", "DRIVER_LOAD_FAILED",
+					fmt.Sprintf("failed to load driver: %v", err),
+					"Check that the driver is a valid WASM module")
+			}
+			logSuccess("    ✓", "Driver loaded")
 		}
 	} else {
 		fmt.Println("⚠ No drivers specified")
@@ -361,4 +375,35 @@ func runDevREPL(bus *iobus.IOBus) {
 			fmt.Printf("Error: Unknown command: %s (type 'help' for commands)\n", command)
 		}
 	}
+}
+
+// loadWASMDriver loads a WASM driver file and registers it with the IOBus
+func loadWASMDriver(bus *iobus.IOBus, driverPath string, index int) error {
+	// Extract driver name from path (e.g., "/tmp/date-driver.wasm" -> "date-driver")
+	driverName := filepath.Base(driverPath)
+	driverName = strings.TrimSuffix(driverName, ".wasm")
+	driverName = strings.TrimSuffix(driverName, filepath.Ext(driverName))
+
+	// Create a DriverSpec for the WASM driver
+	// In dev mode, we infer the URI pattern from the driver name
+	// The actual driver may handle different patterns, but this is for routing
+	spec := iobus.DriverSpec{
+		Name:         fmt.Sprintf("dev-%s-%d", driverName, index),
+		Version:      "dev",
+		Class:        iobus.ConnectDriver,
+		URIPattern:   fmt.Sprintf("%s://**", driverName),
+		Capabilities: []iobus.Capability{iobus.CapCall},
+		Runtime:      "wasm",
+		Binary:       driverPath,
+		// Give dev drivers full permissions
+		Permissions: []string{"**"},
+	}
+
+	// Register the driver with the IOBus
+	// The IOBus will use the WASM runtime loader to load and initialize it
+	if err := bus.Register(spec); err != nil {
+		return fmt.Errorf("failed to register driver: %w", err)
+	}
+
+	return nil
 }

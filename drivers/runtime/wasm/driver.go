@@ -118,6 +118,32 @@ func init() {
 	})
 }
 
+// RegisterWASMRuntime registers the WASM runtime driver and loader with a custom IOBus.
+// This is useful for creating isolated test environments with wazeos dev run.
+func RegisterWASMRuntime(bus *iobus.IOBus) error {
+	// Register the WASM runtime loader
+	if err := RegisterWASMLoader(bus); err != nil {
+		return fmt.Errorf("failed to register WASM loader: %w", err)
+	}
+
+	// Register the WASM runtime driver
+	return bus.Register(iobus.DriverSpec{
+		Name:         "wasm-runtime",
+		Version:      "1.0.0",
+		Class:        iobus.RuntimeDriver,
+		URIPattern:   "wasm://**",
+		Capabilities: []iobus.Capability{iobus.CapHandle},
+		Runtime:      "native",
+		Factory: func() iobus.Driver {
+			return &Driver{
+				uriPattern: "wasm://**",
+				class:      iobus.RuntimeDriver,
+				caps:       []iobus.Capability{iobus.CapHandle},
+			}
+		},
+	})
+}
+
 // ============================================================================
 // Driver Interface Implementation
 // ============================================================================
