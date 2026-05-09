@@ -1262,10 +1262,13 @@ func runDriverBuild(cmd *cobra.Command, args []string) {
 
 	logInfo("Building WASM driver: %s", name)
 
+	// Extract just the driver name (last component) for the binary filename
+	driverName := filepath.Base(name)
+
 	// Build driver as WASM
-	buildCmd := fmt.Sprintf("cd %s && GOOS=wasip1 GOARCH=wasm go build -o build/%s.wasm .", driverPath, name)
+	buildCmd := fmt.Sprintf("cd %s && GOOS=wasip1 GOARCH=wasm go build -o build/%s.wasm .", driverPath, driverName)
 	if driverRelease {
-		buildCmd = fmt.Sprintf("cd %s && GOOS=wasip1 GOARCH=wasm go build -ldflags='-s -w' -o build/%s.wasm .", driverPath, name)
+		buildCmd = fmt.Sprintf("cd %s && GOOS=wasip1 GOARCH=wasm go build -ldflags='-s -w' -o build/%s.wasm .", driverPath, driverName)
 	}
 
 	// Create build directory
@@ -1276,8 +1279,13 @@ func runDriverBuild(cmd *cobra.Command, args []string) {
 		outputError("driver build", "BUILD_FAILED", err.Error(), "Check your code for errors")
 	}
 
-	binaryPath := filepath.Join(driverPath, "build", name+".wasm")
-	stat, _ := os.Stat(binaryPath)
+	binaryPath := filepath.Join(driverPath, "build", driverName+".wasm")
+	stat, err := os.Stat(binaryPath)
+	if err != nil {
+		outputError("driver build", "BINARY_NOT_FOUND",
+			fmt.Sprintf("build completed but binary not found: %s", binaryPath),
+			"Check build output for errors")
+	}
 
 	if jsonOutput {
 		outputSuccess("driver build", map[string]interface{}{
