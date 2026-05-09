@@ -1,580 +1,536 @@
-# Multi-Language Support in WazeOS
+# Multi-Language WASM Support
 
-This document explains how WazeOS supports multiple programming languages and provides a guide for adding support for new languages.
+**Status**: Ready for implementation
+**Current Languages**: Rust
+**Architecture**: Language-agnostic WASM runtime
 
-## Table of Contents
-
-- [Overview](#overview)
-- [Currently Supported Languages](#currently-supported-languages)
-- [Architecture](#architecture)
-- [Adding a New Language](#adding-a-new-language)
-- [Language-Specific Components](#language-specific-components)
-- [Testing](#testing)
-- [Publishing SDKs](#publishing-sdks)
+---
 
 ## Overview
 
-WazeOS is designed to be language-agnostic at the runtime level. All applications and drivers compile to WebAssembly (WASM) and communicate with the kernel using a standard JSON-over-stdio protocol. This means any language that can:
-
-1. Compile to WASM with WASI support
-2. Read/write JSON from stdin/stdout
-3. Implement the required handler interfaces
-
-...can be used to build WazeOS applications and drivers.
-
-## Currently Supported Languages
-
-### Go (TinyGo)
-
-- **Compiler**: [TinyGo](https://tinygo.org/)
-- **Target**: `wasm32-wasi`
-- **SDK Location**: `/sdk/app/`, `/sdk/driver/`
-- **Features**:
-  - Automatic JSON schema generation from struct tags
-  - Full runtime support with garbage collection
-  - Comprehensive SDK with logging, I/O, and context management
-
-### Rust
-
-- **Compiler**: [Cargo](https://doc.rust-lang.org/cargo/) + [rustc](https://www.rust-lang.org/)
-- **Target**: `wasm32-wasi`
-- **SDK Location**: `/sdk/rust/wazeos-app/`, `/sdk/rust/wazeos-driver/`
-- **Features**:
-  - Manual JSON schema definition
-  - Memory-safe, zero-cost abstractions
-  - Excellent performance and small WASM binaries
-  - Full type safety and error handling
+WazeOS drivers and apps are compiled to WebAssembly, making them **inherently language-agnostic**. Any language that can compile to WASM and implement the required contract can be used.
 
 ## Architecture
 
-### The Language-Agnostic Protocol
-
-The WazeOS kernel communicates with WASM modules through a simple protocol:
-
-**For Applications:**
 ```
-Kernel  →  [JSON Input via stdin]  →  App WASM
-Kernel  ←  [JSON Output via stdout] ←  App WASM
+┌─────────────────────────────────────────────────────────┐
+│ Language (Rust, C, Go, AssemblyScript, etc.)           │
+│ - Source code in any WASM-capable language              │
+└──────────────────────┬──────────────────────────────────┘
+                       │ Compile to wasm32-wasip1
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│ WASM Binary (.wasm file)                                │
+│ - Exports: driver_metadata, driver_init, driver_call    │
+│ - Imports: host_iobus_call, host_iobus_create_handle   │
+└──────────────────────┬──────────────────────────────────┘
+                       │ Loaded by WASM runtime
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│ WazeOS WASM Runtime (Go)                                │
+│ - Language-agnostic loader using wazero                 │
+│ - Provides host functions for I/O Bus access            │
+└─────────────────────────────────────────────────────────┘
 ```
 
-**For Drivers:**
-```
-Kernel  →  [ResourceCall JSON via stdin]  →  Driver WASM
-Kernel  ←  [ResourceResult JSON via stdout] ←  Driver WASM
+**Key Insight**: The WASM runtime only sees `.wasm` binaries, not source code. It doesn't know or care what language produced them.
+
+---
+
+## WASM Driver Contract
+
+All WASM drivers must implement this C ABI contract, regardless of source language.
+
+### Required Exports
+
+```c
+// Returns JSON string with driver metadata
+// Format: {"name":"...", "version":"...", "class":"...", "uri_pattern":"...", "capabilities":[...]}
+const char* driver_metadata();
+
+// Initializes the driver with JSON config
+// config_ptr: pointer to JSON string in WASM memory
+// config_len: length of JSON string
+// Returns: 0 on success, non-zero on error
+uint32_t driver_init(uint32_t config_ptr, uint32_t config_len);
+
+// Handles a request
+// request_ptr: pointer to JSON request in WASM memory
+// request_len: length of request JSON
+// Returns: pointer to JSON response string in WASM memory
+const char* driver_call(uint32_t request_ptr, uint32_t request_len);
 ```
 
-This protocol is completely language-independent. The WASM module just needs to:
-1. Read JSON from stdin
-2. Parse it into appropriate data structures
-3. Execute business logic
-4. Serialize results as JSON
-5. Write to stdout
+### Available Imports
 
-### Build System Architecture
+```c
+// Call another driver through IO Bus
+// request_ptr: pointer to JSON request
+// request_len: length of request
+// Returns: packed u64 (high 32 bits = response pointer, low 32 bits = length)
+uint64_t host_iobus_call(uint32_t request_ptr, uint32_t request_len);
 
-The build system detects the language and uses the appropriate compiler:
+// Create a handle to another driver
+// uri_ptr: pointer to URI string
+// uri_len: length of URI
+// Returns: packed u64 (high 32 bits = handle ID pointer, low 32 bits = length)
+uint64_t host_iobus_create_handle(uint32_t uri_ptr, uint32_t uri_len);
 
+// Close a handle
+// uri_ptr: pointer to handle URI
+// uri_len: length of URI
+// Returns: 0 on success, non-zero on error
+uint32_t host_iobus_close_handle(uint32_t uri_ptr, uint32_t uri_len);
 ```
-wazeos apps build
-    ↓
-Language Detection (go.mod, Cargo.toml, main.*, etc.)
-    ↓
-    ├─→ Go: tinygo build -target=wasi
-    └─→ Rust: cargo build --target wasm32-wasi --release
-    ↓
-Result: app.wasm
-```
+
+### Data Format
+
+- **All data exchange happens via JSON strings**
+- Request format: `{"uri":"...", "operation":"...", "args":{...}, "headers":{...}, "body":"base64..."}`
+- Response format: `{"status_code":200, "headers":{...}, "body":"base64...", "error":"..."}`
+
+See [v2/drivers/runtime/wasm/loader.go:62-85](../../drivers/runtime/wasm/loader.go) for full specification.
+
+---
+
+## Language Requirements
+
+To add support for a new language, you need:
+
+### 1. WASM Compilation Target
+
+The language must compile to `wasm32-wasip1` (WASI preview 1):
+- ✅ **Rust** - via `cargo build --target wasm32-wasip1`
+- ✅ **C/C++** - via `clang --target=wasm32-wasi`
+- ✅ **Go** - via TinyGo (not standard Go)
+- ✅ **AssemblyScript** - native WASM target
+- ✅ **Zig** - via `zig build -Dtarget=wasm32-wasi`
+- ✅ **C#** - via Blazor/Uno Platform
+- ❌ **Python** - Pyodide doesn't support WASI well
+- ❌ **JavaScript** - No direct WASI support
+
+### 2. Foreign Function Interface (FFI)
+
+The language must be able to:
+- **Export functions** with C ABI (extern "C")
+- **Import functions** from host environment
+- **Work with raw pointers** and memory addresses
+- **Control memory layout** (for passing strings/buffers)
+
+### 3. JSON Support
+
+The language needs:
+- JSON serialization (struct → JSON string)
+- JSON deserialization (JSON string → struct)
+- Most languages have standard libraries or crates for this
+
+### 4. Memory Management
+
+Understanding of WASM linear memory:
+- Strings/buffers must live in WASM memory
+- Pointers are u32 offsets into linear memory
+- Host can read WASM memory but not vice versa
+- Need to manage lifetimes (especially for returned strings)
+
+---
 
 ## Adding a New Language
 
-To add support for a new language (e.g., AssemblyScript, Zig, C), follow these steps:
+### Step 1: Create SDK Package
 
-### Step 1: Verify WASM/WASI Support
+Create `v2/core/sdk/<language>/wazeos-driver/`:
 
-Ensure the language can:
-- Compile to WASM with WASI support
-- Read from stdin (file descriptor 0)
-- Write to stdout (file descriptor 1)
-- Parse and generate JSON
-
-### Step 2: Create SDK Crates/Packages
-
-Create SDK libraries for the new language in `/sdk/<language>/`:
-
-**For Applications (`/sdk/<language>/wazeos-app`):**
-
-Required types:
 ```
-Context {
-    request_id: String
-    trace_id: String
-    principal: String
-    permissions: PermissionContext
-    metadata: Map<String, String>
+v2/core/sdk/
+├── rust/              # ✅ Current
+│   ├── wazeos-app/
+│   └── wazeos-driver/
+├── c/                 # Future
+│   ├── wazeos-app/
+│   └── wazeos-driver/
+├── go/                # Future (TinyGo)
+└── assemblyscript/    # Future
+```
+
+### Step 2: Implement Low-Level Bindings
+
+Create a library that:
+- Exports the required functions (`driver_metadata`, `driver_init`, `driver_call`)
+- Imports host functions (`host_iobus_call`, etc.)
+- Handles JSON serialization/deserialization
+- Manages string/buffer memory
+
+### Step 3: Create High-Level API
+
+Provide an ergonomic API on top of low-level bindings:
+
+**Rust SDK** (current):
+```rust
+pub trait Driver {
+    fn metadata(&self) -> DriverMetadata;
+    fn init(&mut self, config: HashMap<String, Value>) -> Result<(), String>;
+    fn call(&mut self, req: Request) -> Result<Response, String>;
 }
 
-Response {
-    status_code: Integer
-    headers: Map<String, String>
-    body: Bytes
-    exit_code: Integer
-}
+// Usage
+register_driver!(MyDriver);
 ```
 
-Required trait/interface:
-```
-MCPToolHandler {
-    handle(ctx: Context, input: JSON) -> Result<JSON>
-}
-```
-
-Entry point function:
-```
-run_mcp_tool(handler: MCPToolHandler)
-```
-
-**For Drivers (`/sdk/<language>/wazeos-driver`):**
-
-Required types:
-```
-ResourceCall {
-    uri: String
-    headers: Map<String, String>
-    body: Bytes
-    permissions: Array<String>
-}
-
-ResourceResult {
-    status_code: Integer
-    headers: Map<String, String>
-    body: Bytes
-    error: Optional<String>
-}
-```
-
-Required trait/interface:
-```
-ResourceHandler {
-    handle_call(call: ResourceCall) -> Result<ResourceResult>
-}
-```
-
-Entry point function:
-```
-serve_resource_once(handler: ResourceHandler)
-```
-
-### Step 3: Update Language Detection
-
-Add language detection logic to `/cmd/wazeos/commands/common/language.go`:
-
-```go
-// DetectLanguage determines the language of a project
-func DetectLanguage(dir string) (Language, error) {
-    // Check for new language indicators
-    if _, err := os.Stat(filepath.Join(dir, "build.zig")); err == nil {
-        return LanguageZig, nil
-    }
-
-    // ... existing checks ...
-
-    return "", fmt.Errorf("unable to detect language")
-}
-```
-
-Define the new language constant:
-```go
-const (
-    LanguageGo   Language = "go"
-    LanguageRust Language = "rust"
-    LanguageZig  Language = "zig"  // New
-)
-```
-
-### Step 4: Add Build Support
-
-Add build logic to `/cmd/wazeos/commands/common/language.go`:
-
-```go
-// BuildWASM compiles source code to WASM based on language
-func BuildWASM(lang Language, dir, outputFile string) error {
-    switch lang {
-    case LanguageGo:
-        return buildGoWASM(dir, outputFile)
-    case LanguageRust:
-        return buildRustWASM(dir, outputFile)
-    case LanguageZig:
-        return buildZigWASM(dir, outputFile)  // New
-    default:
-        return fmt.Errorf("unsupported language: %s", lang)
-    }
-}
-
-func buildZigWASM(dir, outputFile string) error {
-    cmd := exec.Command("zig", "build-lib",
-        "src/main.zig",
-        "-target", "wasm32-wasi",
-        "-O", "ReleaseSmall",
-        "-femit-bin=" + outputFile)
-    cmd.Dir = dir
-
-    output, err := cmd.CombinedOutput()
-    if err != nil {
-        return fmt.Errorf("Zig compilation failed:\n%s", string(output))
-    }
-
-    return nil
-}
-```
-
-### Step 5: Add Toolchain Verification
-
-Add toolchain checking to `/cmd/wazeos/commands/common/language.go`:
-
-```go
-// CheckToolchain verifies the required build toolchain is installed
-func CheckToolchain(lang Language) error {
-    switch lang {
-    case LanguageGo:
-        // ... existing checks ...
-    case LanguageRust:
-        // ... existing checks ...
-    case LanguageZig:
-        cmd := exec.Command("zig", "version")
-        if err := cmd.Run(); err != nil {
-            return fmt.Errorf("Zig not found. Install it from: https://ziglang.org/")
-        }
-        // Check WASM target support if needed
-        return nil
-    default:
-        return fmt.Errorf("unsupported language: %s", lang)
-    }
-}
-```
-
-### Step 6: Create Project Templates
-
-Add template generation functions to `/cmd/wazeos/commands/apps/new.go` and `/cmd/wazeos/commands/drivers/new.go`:
-
-**For Apps:**
-
-```go
-func generateProjectFiles(projectDir, author, appName, description, language string) error {
-    var files map[string]string
-
-    if language == "zig" {
-        files = map[string]string{
-            "src/main.zig": generateMainZig(),
-            "build.zig":    generateBuildZig(author, appName, description),
-            "metadata.json": generateMetadata(author, appName, description),
-            "README.md":     generateReadmeZig(author, appName, description),
-            ".gitignore":    generateGitignoreZig(),
-        }
-    } else if language == "rust" {
-        // ... existing Rust templates ...
-    } else {
-        // ... existing Go templates ...
-    }
-
-    // ... write files ...
-}
-
-func generateMainZig() string {
-    return `const std = @import("std");
-
-pub fn main() !void {
-    const stdin = std.io.getStdIn().reader();
-    const stdout = std.io.getStdOut().writer();
-
-    // Read JSON input from stdin
-    var buffer: [4096]u8 = undefined;
-    const input = try stdin.readUntilDelimiterOrEof(&buffer, '\n');
-
-    // Process input (simplified)
-    const response = "{\"status\":\"success\"}";
-
-    // Write JSON output to stdout
-    try stdout.print("{s}\n", .{response});
-}
-`
-}
-```
-
-**For Drivers:**
-
-```go
-func generateDriverMainZig() string {
-    return `const std = @import("std");
-
-pub fn main() !void {
-    const stdin = std.io.getStdIn().reader();
-    const stdout = std.io.getStdOut().writer();
-
-    // Read ResourceCall JSON from stdin
-    var buffer: [4096]u8 = undefined;
-    const input = try stdin.readUntilDelimiterOrEof(&buffer, '\n');
-
-    // Handle resource call (simplified)
-    const response = "{\"statusCode\":200,\"body\":[],\"headers\":{}}";
-
-    // Write ResourceResult JSON to stdout
-    try stdout.print("{s}\n", .{response});
-}
-`
-}
-```
-
-### Step 7: Update Documentation
-
-1. Update `/README.md` to list the new language
-2. Create SDK documentation in `/sdk/<language>/README.md`
-3. Add examples to `/examples/<language>/`
-4. Update build command help text
-
-### Step 8: Schema Generation (Optional)
-
-For languages with reflection or macros, you can add automatic schema generation:
-
-**For Go:**
-- Currently implemented using Go AST parsing
-- Extracts struct tags to generate JSON Schema
-
-**For Rust (Future Enhancement):**
-- Could use `syn` crate for AST parsing
-- Parse derive macros and doc comments
-- Generate schema automatically
-
-**For New Language:**
-- Implement schema extraction in the build command
-- Update `/cmd/wazeos/commands/apps/build.go` to call your schema extractor
-- Fall back to manual schema definition if extraction fails
-
-Example:
-```go
-if lang == common.LanguageZig {
-    fmt.Println("\n→ Schema extraction...")
-    schema, err := extractSchemaFromZig(mainFile)
-    if err != nil {
-        fmt.Println("  ℹ Using manual schema definition from metadata.json")
-    } else if schema != nil {
-        fmt.Printf("  ✓ Extracted schema with %d field(s)\n", len(schema["properties"].(map[string]interface{})))
-        if err := updateMetadata(metadataFile, schema); err != nil {
-            // Handle error
-        }
-    }
-}
-```
-
-## Language-Specific Components
-
-### Required Components
-
-Each language implementation needs:
-
-1. **SDK Package** - Core types and traits/interfaces
-2. **Build Integration** - Compiler invocation in build system
-3. **Language Detection** - File patterns for auto-detection
-4. **Templates** - Starter project generation
-5. **Documentation** - SDK usage guide and examples
-6. **Tests** - Example projects that build and run
-
-### Optional Components
-
-- **Schema Generation** - Automatic JSON schema extraction from code
-- **Package Manager Integration** - Publishing to npm, crates.io, etc.
-- **IDE Support** - Language server, syntax highlighting
-- **Debugging Tools** - WASM debugging integration
-
-### Component Locations
-
-```
-/sdk/<language>/
-    wazeos-app/          # App SDK
-        src/
-        README.md
-        Cargo.toml (or equivalent)
-
-    wazeos-driver/       # Driver SDK
-        src/
-        README.md
-        Cargo.toml (or equivalent)
-
-/cmd/wazeos/commands/
-    common/
-        language.go       # Language detection & build
-    apps/
-        new.go            # App templates
-        build.go          # Build command
-    drivers/
-        new.go            # Driver templates
-        build.go          # Build command
-
-/examples/<language>/
-    hello-app/            # Example app
-    hello-driver/         # Example driver
-
-/docs/
-    LANGUAGE_SUPPORT.md   # This document
-    languages/
-        <language>.md     # Language-specific guide
-```
-
-## Testing
-
-### Manual Testing Checklist
-
-For each new language:
-
-- [ ] Create a new app project: `wazeos apps new test myapp --language <lang>`
-- [ ] Build succeeds: `wazeos apps build test/myapp`
-- [ ] Package succeeds: `wazeos apps package test/myapp`
-- [ ] Install succeeds: `wazeos apps install test/myapp`
-- [ ] Create a new driver project: `wazeos drivers new test mydriver --driver-class io.resource --language <lang>`
-- [ ] Build succeeds: `wazeos drivers build test/mydriver`
-- [ ] Package succeeds: `wazeos drivers package test/mydriver`
-- [ ] Test with sample input: `echo '{"test":"data"}' | wasmtime test/myapp/app.wasm`
-- [ ] Verify JSON output format is correct
-- [ ] Check WASM binary size (should be reasonable)
-- [ ] Test with WazeOS runtime
-
-### Integration Testing
-
-Create integration tests in `/internal/drivers/kernel/runtime/`:
-
-```go
-func TestZigAppExecution(t *testing.T) {
-    // Build test Zig app
-    cmd := exec.Command("wazeos", "apps", "build", "testdata/zig-app")
-    if err := cmd.Run(); err != nil {
-        t.Fatal(err)
-    }
-
-    // Load and execute
-    ctx := context.Background()
-    module, err := LoadWASMModule(ctx, "testdata/zig-app/app.wasm")
-    if err != nil {
-        t.Fatal(err)
-    }
-
-    // Test execution
-    input := `{"message":"test"}`
-    output, err := module.Execute(ctx, []byte(input))
-    if err != nil {
-        t.Fatal(err)
-    }
-
-    // Verify output
-    var result map[string]interface{}
-    if err := json.Unmarshal(output, &result); err != nil {
-        t.Fatal(err)
-    }
-
-    // Assert expected fields
+**Ideal C SDK**:
+```c
+typedef struct {
+    char* name;
+    char* version;
     // ...
+} DriverMetadata;
+
+typedef int (*InitFunc)(const char* config_json);
+typedef char* (*CallFunc)(const char* request_json);
+
+#define REGISTER_DRIVER(name, init_fn, call_fn) \
+    /* macro that generates exports */
+```
+
+**Ideal Go SDK** (TinyGo):
+```go
+type Driver interface {
+    Metadata() Metadata
+    Init(config map[string]any) error
+    Call(req Request) (Response, error)
+}
+
+func RegisterDriver(d Driver) {
+    // Generates exports
 }
 ```
 
-## Publishing SDKs
+### Step 4: Create Example Driver
 
-### Publishing to Package Registries
+Implement a simple driver (e.g., echo driver) to validate the SDK:
 
-**For Rust (crates.io):**
-```bash
-cd sdk/rust/wazeos-app
-cargo publish
-
-cd ../wazeos-driver
-cargo publish
+```
+drivers/<language>-examples/
+└── echo/
+    ├── src/
+    ├── build.sh
+    └── README.md
 ```
 
-**For npm (JavaScript/AssemblyScript):**
-```bash
-cd sdk/javascript/wazeos-app
-npm publish
+### Step 5: Document Build Process
 
-cd ../wazeos-driver
-npm publish
-```
-
-**For other ecosystems:**
-- Go: Module path in go.mod (already accessible via GitHub)
-- Zig: Zig package manager
-- Python: PyPI
-- etc.
-
-### Versioning
-
-Follow semantic versioning for SDKs:
-- **Major version**: Breaking API changes
-- **Minor version**: New features, backward compatible
-- **Patch version**: Bug fixes
-
-Keep SDK versions in sync with WazeOS releases when possible.
-
-### Documentation
-
-Each published SDK should include:
+Create `v2/core/sdk/<language>/README.md` with:
 - Installation instructions
-- Quick start guide
-- API reference
+- Build commands
+- Common issues and solutions
 - Examples
-- Link to main WazeOS documentation
+
+---
+
+## Language-Specific Guides
+
+### C/C++ (Ready to Implement)
+
+**Strengths**:
+- Excellent WASM support (clang)
+- Direct memory control
+- Existing native libraries can be compiled to WASM
+
+**Challenges**:
+- Manual memory management
+- No built-in JSON (need library like cJSON)
+- String handling requires care
+
+**Example**:
+```c
+#include <stdint.h>
+#include <string.h>
+#include "cJSON.h"
+
+// Import host functions
+__attribute__((import_module("env"), import_name("host_iobus_call")))
+extern uint64_t host_iobus_call(uint32_t ptr, uint32_t len);
+
+// Export driver_metadata
+__attribute__((export_name("driver_metadata")))
+const char* driver_metadata() {
+    static char metadata[512];
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddStringToObject(json, "name", "http-driver-c");
+    cJSON_AddStringToObject(json, "version", "1.0.0");
+    // ... more fields
+    char* str = cJSON_PrintUnformatted(json);
+    strncpy(metadata, str, sizeof(metadata));
+    free(str);
+    cJSON_Delete(json);
+    return metadata;
+}
+
+// Export driver_init
+__attribute__((export_name("driver_init")))
+uint32_t driver_init(uint32_t config_ptr, uint32_t config_len) {
+    // Parse config JSON and initialize
+    return 0;
+}
+
+// Export driver_call
+__attribute__((export_name("driver_call")))
+const char* driver_call(uint32_t request_ptr, uint32_t request_len) {
+    // Handle request and return response JSON
+    static char response[4096];
+    // ... implementation
+    return response;
+}
+```
+
+**Build**:
+```bash
+clang --target=wasm32-wasi \
+      -O2 \
+      -nostdlib \
+      -Wl,--no-entry \
+      -Wl,--export=driver_metadata \
+      -Wl,--export=driver_init \
+      -Wl,--export=driver_call \
+      -Wl,--import-memory \
+      -o driver.wasm \
+      driver.c cJSON.c
+```
+
+### Go via TinyGo (Ready to Implement)
+
+**Strengths**:
+- Go developers can use familiar syntax
+- Good WASM support via TinyGo
+- Built-in JSON encoding
+
+**Challenges**:
+- TinyGo has some limitations vs regular Go
+- Garbage collection in WASM
+- Binary size can be larger
+
+**Example**:
+```go
+package main
+
+import (
+    "encoding/json"
+    "unsafe"
+)
+
+type Metadata struct {
+    Name        string   `json:"name"`
+    Version     string   `json:"version"`
+    Class       string   `json:"class"`
+    URIPattern  string   `json:"uri_pattern"`
+    Capabilities []string `json:"capabilities"`
+}
+
+//export driver_metadata
+func driver_metadata() *byte {
+    meta := Metadata{
+        Name:    "http-driver-go",
+        Version: "1.0.0",
+        Class:   "io.connect",
+        URIPattern: "http://**",
+        Capabilities: []string{"call"},
+    }
+
+    data, _ := json.Marshal(meta)
+    return &data[0]
+}
+
+//export driver_init
+func driver_init(configPtr, configLen uint32) uint32 {
+    // Initialize driver
+    return 0
+}
+
+//export driver_call
+func driver_call(reqPtr, reqLen uint32) *byte {
+    // Handle request
+    response := []byte(`{"status_code":200}`)
+    return &response[0]
+}
+
+func main() {}
+```
+
+**Build**:
+```bash
+tinygo build -o driver.wasm \
+    -target=wasi \
+    -no-debug \
+    driver.go
+```
+
+### AssemblyScript (Ready to Implement)
+
+**Strengths**:
+- TypeScript-like syntax
+- Designed specifically for WASM
+- Excellent WASM tooling
+
+**Challenges**:
+- Smaller ecosystem than TypeScript
+- Memory management is manual
+
+**Example**:
+```typescript
+// driver.ts
+import { JSON } from "json-as/assembly";
+
+@external("env", "host_iobus_call")
+declare function host_iobus_call(ptr: u32, len: u32): u64;
+
+class Metadata {
+    name!: string;
+    version!: string;
+    class!: string;
+    uri_pattern!: string;
+    capabilities!: string[];
+}
+
+export function driver_metadata(): string {
+    const meta = new Metadata();
+    meta.name = "http-driver-as";
+    meta.version = "1.0.0";
+    meta.class = "io.connect";
+    meta.uri_pattern = "http://**";
+    meta.capabilities = ["call"];
+
+    return JSON.stringify(meta);
+}
+
+export function driver_init(config_ptr: u32, config_len: u32): u32 {
+    // Initialize driver
+    return 0;
+}
+
+export function driver_call(request_ptr: u32, request_len: u32): string {
+    // Handle request
+    return '{"status_code":200}';
+}
+```
+
+**Build**:
+```bash
+asc driver.ts \
+    --target release \
+    --runtime stub \
+    --exportRuntime \
+    -o driver.wasm
+```
+
+---
+
+## Testing Multi-Language Drivers
+
+All drivers, regardless of language, must pass the same test suite:
+
+### 1. Contract Compliance
+
+```bash
+# Verify WASM module exports required functions
+wasm-objdump -x driver.wasm | grep -E "export.*driver_(metadata|init|call)"
+```
+
+### 2. Metadata Test
+
+```go
+// Load driver and verify metadata
+driver, _ := iobus.NewWASMDriver(spec, bus)
+metadata := driver.Metadata()
+assert(metadata.Name != "")
+assert(metadata.URIPattern != "")
+```
+
+### 3. Integration Test
+
+```go
+// Full request/response cycle
+req := iobus.Request{
+    URI: "test://echo",
+    Operation: "call",
+    Body: []byte("hello"),
+}
+resp, err := driver.Call(ctx, req)
+assert(err == nil)
+assert(resp.StatusCode == 200)
+```
+
+### 4. Performance Benchmark
+
+```bash
+# Compare performance across languages
+go test -bench=. -benchmem
+# Benchmark WASM driver load time
+# Benchmark request/response throughput
+```
+
+---
+
+## Migration Path
+
+### Phase 1: Foundation (Current)
+- ✅ Language-agnostic WASM runtime
+- ✅ Rust SDK (reference implementation)
+- ✅ Documentation of driver contract
+
+### Phase 2: C/C++ Support
+- [ ] Create C SDK (`v2/core/sdk/c/`)
+- [ ] Port one driver to C (e.g., file driver)
+- [ ] Document C-specific patterns
+
+### Phase 3: Go Support
+- [ ] Create TinyGo SDK (`v2/core/sdk/go/`)
+- [ ] Port one driver to Go
+- [ ] Performance comparison with Rust
+
+### Phase 4: AssemblyScript Support
+- [ ] Create AssemblyScript SDK
+- [ ] Example driver
+- [ ] Web-friendly documentation
+
+### Phase 5: Additional Languages
+- [ ] Community-driven: Zig, Swift, C#, etc.
+- [ ] SDK template for new languages
+- [ ] Automated testing harness
+
+---
 
 ## Best Practices
 
-### For SDK Developers
+### For SDK Authors
 
-1. **Keep It Simple**: The SDK should be as thin as possible. Focus on the protocol, not fancy abstractions.
-2. **Follow Conventions**: Match the idioms of the target language.
-3. **Document Everything**: Provide examples for common use cases.
-4. **Test Thoroughly**: Include unit tests and integration tests.
-5. **Optimize for Size**: WASM binaries should be as small as possible.
+1. **Hide Complexity**: Wrap low-level FFI with ergonomic API
+2. **Provide Macros**: Auto-generate boilerplate (like Rust's `register_driver!`)
+3. **Handle Memory**: Manage string lifetimes automatically
+4. **Include Examples**: Show common patterns (HTTP call, file I/O, etc.)
+5. **Document Limitations**: Language-specific constraints
 
-### For Build System Integration
+### For Driver Authors
 
-1. **Fail Fast**: Provide clear error messages for missing toolchains.
-2. **Detect Automatically**: Use file patterns to auto-detect language.
-3. **Support Flags**: Allow `--language` override for explicit selection.
-4. **Cache Intelligently**: Don't rebuild if source hasn't changed.
+1. **Start with Rust**: Best tooling and ecosystem
+2. **Use C for Libraries**: Wrap existing native code
+3. **Use Go for Familiarity**: If team knows Go
+4. **Use AssemblyScript for Web**: If targeting browser too
 
-### For Template Generation
+### For Core Team
 
-1. **Include Comments**: Explain what each part does.
-2. **Show Best Practices**: Demonstrate error handling, logging, etc.
-3. **Keep It Minimal**: Don't include unnecessary dependencies.
-4. **Make It Runnable**: Template should build and run immediately.
+1. **Don't Leak Abstractions**: Keep WASM runtime language-agnostic
+2. **Test All Languages**: Same test suite for all
+3. **Document Contract**: Keep driver contract stable and clear
+4. **Performance Parity**: All languages should have similar overhead
 
-## Future Enhancements
+---
 
-### Planned Language Support
+## References
 
-- **AssemblyScript**: TypeScript-like syntax, compiles to WASM
-- **Zig**: Modern systems language with excellent WASM support
-- **C/C++**: Using Emscripten or wasi-sdk
-- **Python**: Using Pyodide or similar WASM Python runtime
+- **WASM Contract**: [v2/drivers/runtime/wasm/loader.go](../../drivers/runtime/wasm/loader.go)
+- **WASM Runtime**: [v2/drivers/runtime/wasm/driver.go](../../drivers/runtime/wasm/driver.go)
+- **Rust SDK**: [v2/core/sdk/rust/driver/](../../core/sdk/rust/driver/)
+- **Rust Example**: [drivers/file/src/lib.rs](../../../drivers/file/src/lib.rs)
 
-### Build System Improvements
+---
 
-- **Parallel Builds**: Build multiple modules simultaneously
-- **Incremental Compilation**: Only rebuild changed modules
-- **Build Caching**: Cache WASM artifacts across builds
-- **Cross-Compilation**: Build for different WASM feature sets
-
-### SDK Enhancements
-
-- **I/O Helpers**: High-level APIs for file, HTTP, database operations
-- **Testing Utilities**: Mock contexts, test harnesses
-- **Debugging Tools**: Better error messages, stack traces
-- **Performance Profiling**: Built-in profiling support
-
-## Conclusion
-
-WazeOS's language-agnostic architecture makes it straightforward to add support for new languages. The key is implementing the JSON-over-stdio protocol and providing a good developer experience through SDKs and tooling.
-
-If you're adding support for a new language, feel free to:
-1. Follow this guide
-2. Open a PR with your implementation
-3. Ask questions in GitHub Discussions
-4. Share your progress with the community
-
-Happy coding! 🚀
+**Next Steps**: Choose a second language to support and create its SDK following the steps above. C/C++ is recommended as it has the most mature WASM tooling.
